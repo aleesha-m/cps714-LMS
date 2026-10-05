@@ -20,7 +20,8 @@ router.post("/", async (req, res) => {
             ISBN: req.body.ISBN,
             author: req.body.author,
             title: req.body.title,
-            genre: req.body.genre
+            genre: req.body.genre,
+            cover: req.body.cover
         });
 
         const savedBook = await book.save();
