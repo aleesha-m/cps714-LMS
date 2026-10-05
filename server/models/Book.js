@@ -21,6 +21,10 @@ const bookSchema = new mongoose.Schema({
     available: {
         type: Boolean,
         default: true
+    },
+    cover: {
+        type: String,
+        default: ""
     }
 });
 
