@@ -11,7 +11,9 @@ This repository currently contains a frontend prototype. Its sample records are 
 Requirements: Node.js 22 or later and npm.
 
 ```sh
-npm ci
+npm install express mongoose cors dotenv
+npm install -D nodemon
+npm ci, if this does not work do npm install
 npm run dev
 ```
 
