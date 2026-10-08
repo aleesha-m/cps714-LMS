@@ -1,23 +1,35 @@
 # CPS714 Library Management System
 
-A library management system project for CPS714. The current application is a responsive React demo for library staff, with overview, catalog, members, and loans views.
+A library management system project for CPS714. The application includes a React library dashboard, separate librarian and member sign-in flows, and an Express/MongoDB API.
 
 ## Project Status
 
-This repository currently contains a frontend prototype. Its sample records are static, and sign-in is a demo interaction only; there is no authentication service, database, or API integration yet.
+Sign-in uses MongoDB-backed sessions and bcrypt-hashed passwords. The dashboard's library records are still sample frontend data; its management API routes are protected for librarians.
 
 ## Getting Started
 
-Requirements: Node.js 22 or later and npm.
+Requirements: Node.js 22.12 or later, npm, and a MongoDB database.
 
 ```sh
-npm install express mongoose cors dotenv
-npm install -D nodemon
-npm ci, if this does not work do npm install
+cp .env.example .env
+npm ci
+```
+
+Set `MONGO_URI` and a long random `SESSION_SECRET` in `.env`. To create the initial librarian login, set `ACCOUNT_ROLE=librarian`, `ACCOUNT_ID`, `ACCOUNT_NAME`, `ACCOUNT_EMAIL`, and `ACCOUNT_PASSWORD`, then run:
+
+```sh
+npm run account:setup
+```
+
+Remove `ACCOUNT_PASSWORD` from `.env` after account setup. To enable a member login, the member must already exist in MongoDB; set `ACCOUNT_ROLE=member`, `ACCOUNT_ID` to their member ID, and `ACCOUNT_EMAIL` to the email on that record, then run the same setup command. Member credentials can also be assigned when a librarian creates a member through the API.
+
+Start both the Vite frontend and API during development with:
+
+```sh
 npm run dev
 ```
 
-Vite prints the local development URL in the terminal.
+Vite prints the local development URL in the terminal. The frontend proxies `/api` requests to the Express server on port 5001.
 
 ## Quality Checks
 
