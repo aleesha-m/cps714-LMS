@@ -1,10 +1,11 @@
 import express from "express";
 import Book from "../models/Book.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Get all books
-router.get("/", async (req, res) => {
+// Get all books (any signed-in user)
+router.get("/", requireAuth, async (req, res) => {
     try {
         const books = await Book.find();
         res.json(books);
@@ -13,8 +14,8 @@ router.get("/", async (req, res) => {
     }
 });
 
-// Add a new book
-router.post("/", async (req, res) => {
+// Add a new book (librarians only)
+router.post("/", requireAuth, requireRole("librarian"), async (req, res) => {
     try {
         const book = new Book({
             ISBN: req.body.ISBN,

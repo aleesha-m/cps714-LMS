@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -11,7 +11,6 @@ import {
   ChevronDown,
   CircleHelp,
   Clock3,
-  Command,
   LayoutDashboard,
   LibraryBig,
   LogOut,
@@ -21,44 +20,170 @@ import {
   Settings2,
   UsersRound,
 } from 'lucide-react'
+import { api, ApiError, type ApiBook, type ApiLoan, type ApiMember, type Role, type User } from './api'
 import './App.css'
 
 type Section = 'Overview' | 'Catalog' | 'Members' | 'Loans'
 
-const books = [
-  { title: 'The Creative Act', author: 'Rick Rubin', genre: 'Arts & Culture', status: 'Available', id: 'BK-2048', cover: 'https://covers.openlibrary.org/b/isbn/9780593652886-M.jpg' },
-  { title: 'Tomorrow, and Tomorrow, and Tomorrow', author: 'Gabrielle Zevin', genre: 'Fiction', status: 'Checked out', id: 'BK-2047', cover: 'https://covers.openlibrary.org/b/isbn/9780593321201-M.jpg' },
-  { title: 'Braiding Sweetgrass', author: 'Robin Wall Kimmerer', genre: 'Nature', status: 'Available', id: 'BK-2046', cover: 'https://covers.openlibrary.org/b/isbn/9781571313560-M.jpg' },
-  { title: 'A Little Life', author: 'Hanya Yanagihara', genre: 'Fiction', status: 'Reserved', id: 'BK-2045', cover: 'https://covers.openlibrary.org/b/isbn/9780804172707-M.jpg' },
-  { title: 'The Design of Everyday Things', author: 'Don Norman', genre: 'Design', status: 'Available', id: 'BK-2044', cover: 'https://covers.openlibrary.org/b/isbn/9780465050659-M.jpg' },
-]
+const avatarColors = ['sage', 'peach', 'lavender']
 
-const loans = [
-  { member: 'Olivia Rhye', initials: 'OR', book: 'Tomorrow, and Tomorrow, and Tomorrow', due: 'Today', color: 'sage' },
-  { member: 'Phoenix Baker', initials: 'PB', book: 'The Midnight Library', due: 'Oct 06, 2026', color: 'peach' },
-  { member: 'Lana Steiner', initials: 'LS', book: 'Educated', due: 'Oct 08, 2026', color: 'lavender' },
-]
+function initialsOf(name: string) {
+  return name.split(' ').filter(Boolean).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+}
+
+function formatDue(iso: string) {
+  const due = new Date(iso)
+  const today = new Date()
+  if (due.toDateString() === today.toDateString()) return 'Today'
+  return due.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })
+}
 
 function App() {
-  const [isSignedIn, setIsSignedIn] = useState(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [checkingSession, setCheckingSession] = useState(true)
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
+  const [signupRole, setSignupRole] = useState<Role>('member')
+  const [authError, setAuthError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [apiBooks, setApiBooks] = useState<ApiBook[]>([])
+  const [apiLoans, setApiLoans] = useState<ApiLoan[]>([])
+  const [apiMembers, setApiMembers] = useState<ApiMember[]>([])
   const [activeSection, setActiveSection] = useState<Section>('Overview')
   const [query, setQuery] = useState('')
   const [genre, setGenre] = useState('All genres')
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const isLibrarian = user?.role === 'librarian'
+
+  const books = useMemo(
+    () => apiBooks.map((book) => ({
+      title: book.title,
+      author: book.author,
+      genre: book.genre,
+      status: book.available ? 'Available' : 'Checked out',
+      id: book.ISBN,
+      cover: book.cover ?? '',
+    })),
+    [apiBooks],
+  )
   const filteredBooks = useMemo(
     () => books.filter((book) => {
       const matchesQuery = `${book.title} ${book.author} ${book.id}`.toLowerCase().includes(query.toLowerCase())
       return matchesQuery && (genre === 'All genres' || book.genre === genre)
     }),
-    [genre, query],
+    [books, genre, query],
   )
+  const loanRows = useMemo(
+    () => apiLoans
+      .filter((loan) => !loan.return_date)
+      .sort((x, y) => new Date(x.due_date).getTime() - new Date(y.due_date).getTime())
+      .map((loan, index) => {
+        const member = loan.user_id === user?.profile_id
+          ? user.name
+          : apiMembers.find((m) => m.user_id === loan.user_id)?.name ?? loan.user_id
+        return {
+          loanId: loan.loan_id,
+          member: isLibrarian ? member : 'you',
+          initials: initialsOf(member),
+          book: apiBooks.find((b) => b.ISBN === loan.ISBN)?.title ?? loan.ISBN,
+          due: formatDue(loan.due_date),
+          overdue: new Date(loan.due_date).getTime() < Date.now(),
+          color: avatarColors[index % 3],
+        }
+      }),
+    [apiLoans, apiBooks, apiMembers, user, isLibrarian],
+  )
+  const dueSoon = loanRows.slice(0, 3)
 
-  function signIn(event: FormEvent<HTMLFormElement>) {
+  const loadData = useCallback(async (current: User) => {
+    try {
+      const [booksData, loansData, membersData] = await Promise.all([
+        api.books(),
+        api.loans(),
+        current.role === 'librarian' ? api.members() : Promise.resolve<ApiMember[]>([]),
+      ])
+      setApiBooks(booksData)
+      setApiLoans(loansData)
+      setApiMembers(membersData)
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setUser(null)
+        setAuthError('Your session expired. Please sign in again.')
+      } else {
+        setNotice(error instanceof Error ? error.message : 'Could not load data')
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    api.me()
+      .then((current) => {
+        setUser(current)
+        setActiveSection(current.role === 'librarian' ? 'Overview' : 'Catalog')
+      })
+      .catch(() => undefined)
+      .finally(() => setCheckingSession(false))
+  }, [])
+
+  useEffect(() => {
+    if (user) void loadData(user)
+  }, [user, loadData])
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setIsSignedIn(true)
+    const form = new FormData(event.currentTarget)
+    const field = (name: string) => String(form.get(name) ?? '')
+    setBusy(true)
+    setAuthError('')
+    try {
+      const signedIn = authMode === 'signin'
+        ? await api.login(field('email'), field('password'))
+        : await api.signup({
+            name: field('name'),
+            email: field('email'),
+            password: field('password'),
+            phone: field('phone'),
+            role: signupRole,
+            code: field('code'),
+          })
+      setUser(signedIn)
+      setActiveSection(signedIn.role === 'librarian' ? 'Overview' : 'Catalog')
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Something went wrong')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  if (!isSignedIn) {
+  async function signOut() {
+    await api.logout().catch(() => undefined)
+    setUser(null)
+    setApiBooks([])
+    setApiLoans([])
+    setApiMembers([])
+    setNotice('')
+    setAuthError('')
+  }
+
+  async function runAction(action: () => Promise<unknown>, success: string) {
+    setNotice('')
+    try {
+      await action()
+      setNotice(success)
+      if (user) await loadData(user)
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setUser(null)
+        setAuthError('Your session expired. Please sign in again.')
+      } else {
+        setNotice(error instanceof Error ? error.message : 'Something went wrong')
+      }
+    }
+  }
+
+  if (checkingSession) return null
+
+  if (!user) {
     return (
       <main className="login-page">
         <section className="login-visual" aria-label="A quiet library reading room">
@@ -85,20 +210,44 @@ function App() {
           </div>
           <div className="login-form-wrap">
             <div className="login-heading">
-              <span className="eyebrow">WELCOME BACK</span>
+              <span className="eyebrow">{authMode === 'signin' ? 'WELCOME BACK' : 'JOIN THE LIBRARY'}</span>
               <h2>Your library,<br />in good hands.</h2>
-              <p>Sign in to manage your collection and community.</p>
+              <p>{authMode === 'signin' ? 'Sign in to manage your collection and community.' : 'Create an account to borrow books and manage your loans.'}</p>
             </div>
-            <form className="login-form" onSubmit={signIn}>
+            <form className="login-form" onSubmit={submitAuth}>
+              {authMode === 'signup' && (
+                <>
+                  <label htmlFor="name">Full name</label>
+                  <input id="name" name="name" type="text" placeholder="Your name" autoComplete="name" maxLength={50} required />
+                </>
+              )}
               <label htmlFor="email">Email address</label>
               <input id="email" name="email" type="email" placeholder="you@yourlibrary.org" autoComplete="username" required />
-              <div className="password-label"><label htmlFor="password">Password</label><a href="#forgot">Forgot password?</a></div>
-              <input id="password" name="password" type="password" placeholder="Enter your password" autoComplete="current-password" required />
-              <button className="button button-primary sign-in-button" type="submit">Sign in <ArrowRight size={16} /></button>
+              {authMode === 'signup' && (
+                <>
+                  <label htmlFor="phone">Phone number{signupRole === 'librarian' ? ' (optional)' : ''}</label>
+                  <input id="phone" name="phone" type="tel" placeholder="416-555-0123" autoComplete="tel" required={signupRole === 'member'} />
+                  <label htmlFor="role">I am a</label>
+                  <select id="role" name="role" className="auth-select" value={signupRole} onChange={(event) => setSignupRole(event.target.value as Role)}>
+                    <option value="member">Library member</option>
+                    <option value="librarian">Librarian</option>
+                  </select>
+                  {signupRole === 'librarian' && (
+                    <>
+                      <label htmlFor="code">Librarian invite code</label>
+                      <input id="code" name="code" type="password" placeholder="Ask your head librarian" autoComplete="off" required />
+                    </>
+                  )}
+                </>
+              )}
+              <div className="password-label"><label htmlFor="password">Password</label>{authMode === 'signin' && <a href="#forgot">Forgot password?</a>}</div>
+              <input id="password" name="password" type="password" placeholder={authMode === 'signin' ? 'Enter your password' : 'At least 8 characters'} autoComplete={authMode === 'signin' ? 'current-password' : 'new-password'} minLength={authMode === 'signup' ? 8 : undefined} required />
+              {authError && <p className="auth-error" role="alert">{authError}</p>}
+              <button className="button button-primary sign-in-button" type="submit" disabled={busy}>{authMode === 'signin' ? 'Sign in' : 'Create account'} <ArrowRight size={16} /></button>
             </form>
             <div className="login-divider"><span /> or <span /></div>
-            <button className="button button-secondary demo-button" type="button" onClick={() => setIsSignedIn(true)}>
-              <Command size={15} /> Explore the demo dashboard
+            <button className="button button-secondary demo-button" type="button" onClick={() => { setAuthMode(authMode === 'signin' ? 'signup' : 'signin'); setAuthError('') }}>
+              {authMode === 'signin' ? 'Create an account' : 'I already have an account'}
             </button>
             <p className="login-help">Need a hand? <a href="mailto:hello@commonplace.library">Get in touch</a></p>
           </div>
@@ -128,10 +277,10 @@ function App() {
             ['Catalog', BookCopy],
             ['Members', UsersRound],
             ['Loans', ArrowDownToLine],
-          ] as const).map(([section, Icon]) => (
+          ] as const).filter(([section]) => isLibrarian || section === 'Catalog' || section === 'Loans').map(([section, Icon]) => (
             <button key={section} className={`nav-link ${activeSection === section ? 'nav-link-active' : ''}`} onClick={() => { setActiveSection(section); setMobileNavOpen(false) }}>
-              <Icon size={17} strokeWidth={1.8} /><span>{section}</span>
-              {section === 'Loans' && <span className="nav-count">12</span>}
+              <Icon size={17} strokeWidth={1.8} /><span>{section === 'Loans' && !isLibrarian ? 'My loans' : section}</span>
+              {section === 'Loans' && loanRows.length > 0 && <span className="nav-count">{loanRows.length}</span>}
             </button>
           ))}
         </nav>
@@ -139,9 +288,9 @@ function App() {
           <button className="nav-link"><Settings2 size={17} /><span>Settings</span></button>
           <button className="nav-link"><CircleHelp size={17} /><span>Help & support</span></button>
           <div className="sidebar-user">
-            <div className="user-avatar">JM</div>
-            <div className="user-info"><strong>Jamie Morgan</strong><span>Library admin</span></div>
-            <button className="icon-button sign-out" aria-label="Sign out" title="Sign out" onClick={() => setIsSignedIn(false)}><LogOut size={16} /></button>
+            <div className="user-avatar">{initialsOf(user.name)}</div>
+            <div className="user-info"><strong>{user.name}</strong><span>{isLibrarian ? 'Librarian' : 'Member'}</span></div>
+            <button className="icon-button sign-out" aria-label="Sign out" title="Sign out" onClick={() => void signOut()}><LogOut size={16} /></button>
           </div>
         </div>
       </aside>
@@ -153,15 +302,16 @@ function App() {
           <div className="topbar-actions">
             <div className="topbar-date"><CalendarDays size={15} /><span>Thursday, October 2, 2026</span></div>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={18} /><i /></button>
-            <div className="topbar-avatar">JM</div>
+            <div className="topbar-avatar">{initialsOf(user.name)}</div>
           </div>
         </header>
 
         <div className="content-wrap">
+          {notice && <p className="notice" role="status">{notice}</p>}
           {activeSection === 'Overview' ? (
             <>
               <div className="page-heading">
-                <div><span className="eyebrow">THURSDAY, OCTOBER 2, 2026</span><h1>Good morning, Jamie <span className="wave">✳</span></h1><p>Here’s what’s happening at your library today.</p></div>
+                <div><span className="eyebrow">THURSDAY, OCTOBER 2, 2026</span><h1>Good morning, {user.name.split(' ')[0]} <span className="wave">✳</span></h1><p>Here’s what’s happening at your library today.</p></div>
                 <button className="button button-primary add-button" onClick={() => setActiveSection('Catalog')}><Plus size={16} /> Add a book</button>
               </div>
               <section className="stats-grid" aria-label="Library statistics">
@@ -174,11 +324,11 @@ function App() {
               <section className="dashboard-columns">
                 <div className="panel catalog-panel">
                   <div className="panel-heading"><div><h2>Recently added</h2><p>Fresh on the shelves this week</p></div><button className="text-button" onClick={() => setActiveSection('Catalog')}>View catalog <ArrowRight size={14} /></button></div>
-                  <div className="book-table-wrap"><table className="book-table"><thead><tr><th>BOOK TITLE</th><th>GENRE</th><th>STATUS</th><th>ID</th></tr></thead><tbody>{books.slice(0, 4).map((book) => <tr key={book.id}><td><div className="book-cell"><img src={book.cover} alt="" /><span><strong>{book.title}</strong><small>{book.author}</small></span></div></td><td>{book.genre}</td><td><span className={`status status-${book.status.toLowerCase().replace(' ', '-')}`}><i />{book.status}</span></td><td className="book-id">{book.id}</td></tr>)}</tbody></table></div>
+                  <div className="book-table-wrap"><table className="book-table"><thead><tr><th>BOOK TITLE</th><th>GENRE</th><th>STATUS</th><th>ID</th></tr></thead><tbody>{books.slice(0, 4).map((book) => <tr key={book.id}><td><div className="book-cell">{book.cover ? <img src={book.cover} alt="" /> : <i className="cover-fallback" />}<span><strong>{book.title}</strong><small>{book.author}</small></span></div></td><td>{book.genre}</td><td><span className={`status status-${book.status.toLowerCase().replace(' ', '-')}`}><i />{book.status}</span></td><td className="book-id">{book.id}</td></tr>)}</tbody></table></div>
                 </div>
                 <div className="panel activity-panel">
                   <div className="panel-heading"><div><h2>Due back soon</h2><p>Keep an eye on these returns</p></div><button className="icon-button panel-more" aria-label="View loan activity" title="View loans" onClick={() => setActiveSection('Loans')}><ArrowUpRight size={17} /></button></div>
-                  <div className="loan-list">{loans.map((loan) => <div className="loan-item" key={loan.member}><div className={`member-avatar avatar-${loan.color}`}>{loan.initials}</div><div className="loan-person"><strong>{loan.member}</strong><span>{loan.book}</span></div><div className={`loan-due ${loan.due === 'Today' ? 'due-today' : ''}`}>{loan.due}</div></div>)}</div>
+                  <div className="loan-list">{dueSoon.length === 0 && <p className="empty-state">No active loans.</p>}{dueSoon.map((loan) => <div className="loan-item" key={loan.loanId}><div className={`member-avatar avatar-${loan.color}`}>{loan.initials}</div><div className="loan-person"><strong>{loan.member}</strong><span>{loan.book}</span></div><div className={`loan-due ${loan.due === 'Today' || loan.overdue ? 'due-today' : ''}`}>{loan.due}</div></div>)}</div>
                   <button className="activity-link" onClick={() => setActiveSection('Loans')}>See all loans <ArrowRight size={14} /></button>
                 </div>
               </section>
@@ -191,10 +341,10 @@ function App() {
             </>
           ) : (
             <>
-              <div className="page-heading section-page-heading"><div><span className="eyebrow">NORTHWOOD LIBRARY</span><h1>{activeSection}</h1><p>{activeSection === 'Catalog' ? 'Browse and manage every title in your collection.' : activeSection === 'Members' ? 'Get to know the people who make this library.' : 'Keep track of checkouts, returns, and what’s due.'}</p></div><button className="button button-primary add-button" onClick={() => activeSection === 'Catalog' ? setQuery('') : setActiveSection('Overview')}><Plus size={16} /> {activeSection === 'Catalog' ? 'Add a book' : activeSection === 'Members' ? 'Add a member' : 'New loan'}</button></div>
+              <div className="page-heading section-page-heading"><div><span className="eyebrow">NORTHWOOD LIBRARY</span><h1>{activeSection}</h1><p>{activeSection === 'Catalog' ? 'Browse and manage every title in your collection.' : activeSection === 'Members' ? 'Get to know the people who make this library.' : isLibrarian ? 'Keep track of checkouts, returns, and what’s due.' : 'Books you have checked out, and when they’re due back.'}</p></div>{isLibrarian && <button className="button button-primary add-button" onClick={() => activeSection === 'Catalog' ? setQuery('') : setActiveSection('Overview')}><Plus size={16} /> {activeSection === 'Catalog' ? 'Add a book' : activeSection === 'Members' ? 'Add a member' : 'New loan'}</button>}</div>
               <div className="panel section-panel">
                 <div className="list-toolbar"><label className="search-field"><Search size={17} /><input type="search" placeholder={`Search ${activeSection.toLowerCase()}...`} value={query} onChange={(event) => setQuery(event.target.value)} /></label>{activeSection === 'Catalog' && <select className="genre-select" value={genre} onChange={(event) => setGenre(event.target.value)}><option>All genres</option><option>Arts & Culture</option><option>Fiction</option><option>Nature</option><option>Design</option></select>}<button className="button button-secondary export-button" onClick={() => window.print()}><ArrowDownToLine size={15} /> Export</button></div>
-                {activeSection === 'Catalog' ? <div className="book-table-wrap"><table className="book-table full-table"><thead><tr><th>BOOK TITLE</th><th>GENRE</th><th>STATUS</th><th>ITEM ID</th></tr></thead><tbody>{filteredBooks.map((book) => <tr key={book.id}><td><div className="book-cell"><img src={book.cover} alt="" /><span><strong>{book.title}</strong><small>{book.author}</small></span></div></td><td>{book.genre}</td><td><span className={`status status-${book.status.toLowerCase().replace(' ', '-')}`}><i />{book.status}</span></td><td className="book-id">{book.id}</td></tr>)}</tbody></table>{filteredBooks.length === 0 && <p className="empty-state">No books match that search.</p>}</div> : activeSection === 'Members' ? <div className="generic-list">{['Olivia Rhye', 'Phoenix Baker', 'Lana Steiner', 'Demi Wilkinson', 'Candice Wu'].filter((name) => name.toLowerCase().includes(query.toLowerCase())).map((name, index) => <div className="generic-row" key={name}><div className={`member-avatar avatar-${['sage', 'peach', 'lavender'][index % 3]}`}>{name.split(' ').map((part) => part[0]).join('')}</div><div><strong>{name}</strong><span>{index % 2 ? 'Standard member' : 'Community member'}</span></div><span className="member-since">Member since 202{index + 1}</span><span className="member-active"><i /> Active</span></div>)}</div> : <div className="generic-list">{loans.filter((loan) => `${loan.member} ${loan.book}`.toLowerCase().includes(query.toLowerCase())).map((loan) => <div className="generic-row" key={loan.member}><div className={`member-avatar avatar-${loan.color}`}>{loan.initials}</div><div><strong>{loan.book}</strong><span>Checked out by {loan.member}</span></div><span className={`loan-due ${loan.due === 'Today' ? 'due-today' : ''}`}>Due {loan.due}</span><button className="text-button return-button">Mark returned <ArrowRight size={14} /></button></div>)}</div>}
+                {activeSection === 'Catalog' ? <div className="book-table-wrap"><table className="book-table full-table"><thead><tr><th>BOOK TITLE</th><th>GENRE</th><th>STATUS</th><th>ITEM ID</th><th></th></tr></thead><tbody>{filteredBooks.map((book) => <tr key={book.id}><td><div className="book-cell">{book.cover ? <img src={book.cover} alt="" /> : <i className="cover-fallback" />}<span><strong>{book.title}</strong><small>{book.author}</small></span></div></td><td>{book.genre}</td><td><span className={`status status-${book.status.toLowerCase().replace(' ', '-')}`}><i />{book.status}</span></td><td className="book-id">{book.id}</td><td><button className="text-button return-button" disabled={book.status !== 'Available'} onClick={() => void runAction(() => api.checkOut(book.id), 'Book checked out.')}>Check out <ArrowRight size={14} /></button></td></tr>)}</tbody></table>{filteredBooks.length === 0 && <p className="empty-state">{books.length === 0 ? 'The catalog is empty.' : 'No books match that search.'}</p>}</div> : activeSection === 'Members' ? <div className="generic-list">{apiMembers.filter((m) => `${m.name} ${m.email}`.toLowerCase().includes(query.toLowerCase())).map((m, index) => <div className="generic-row" key={m.user_id}><div className={`member-avatar avatar-${avatarColors[index % 3]}`}>{initialsOf(m.name)}</div><div><strong>{m.name}</strong><span>{m.email}</span></div><span className="member-since">{m.phone_num}</span><span className="member-active"><i /> Active</span></div>)}{apiMembers.length === 0 && <p className="empty-state">No members yet.</p>}</div> : <div className="generic-list">{loanRows.length === 0 && <p className="empty-state">No active loans.</p>}{loanRows.filter((loan) => `${loan.member} ${loan.book}`.toLowerCase().includes(query.toLowerCase())).map((loan) => <div className="generic-row" key={loan.loanId}><div className={`member-avatar avatar-${loan.color}`}>{loan.initials}</div><div><strong>{loan.book}</strong><span>Checked out by {loan.member}</span></div><span className={`loan-due ${loan.due === 'Today' || loan.overdue ? 'due-today' : ''}`}>Due {loan.due}</span><button className="text-button return-button" onClick={() => void runAction(() => api.returnLoan(loan.loanId), 'Book checked in.')}>{isLibrarian ? 'Mark returned' : 'Check in'} <ArrowRight size={14} /></button></div>)}</div>}
               </div>
               <footer className="dashboard-footer"><span>Made for the love of reading.</span><span>COMMONPLACE LIBRARY SYSTEM <i>·</i> 2026</span></footer>
             </>

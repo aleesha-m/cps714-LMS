@@ -1,10 +1,11 @@
 import express from "express";
 import Librarian from "../models/Librarian.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Get all librarians
-router.get("/", async (req, res) => {
+// Get all librarians (librarians only)
+router.get("/", requireAuth, requireRole("librarian"), async (req, res) => {
     try {
         const librarians = await Librarian.find();
         res.json(librarians);
@@ -13,8 +14,8 @@ router.get("/", async (req, res) => {
     }
 });
 
-// Add a new librarian
-router.post("/", async (req, res) => {
+// Add a new librarian (librarians only)
+router.post("/", requireAuth, requireRole("librarian"), async (req, res) => {
     try {
         const librarian = new Librarian({
             staff_id: req.body.staff_id,

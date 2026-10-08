@@ -321,3 +321,12 @@
   .dashboard-main { width: 100%; }
   .panel { border: 0; }
 }
+
+/* Auth + live data additions */
+.login-form .auth-select { width: 100%; height: 46px; padding: 0 13px; border: 1px solid #d9ddd4; border-radius: 3px; background: #fff; color: var(--ink); font: 13px var(--sans); outline: none; }
+.login-form .auth-select:focus { border-color: var(--moss); box-shadow: 0 0 0 3px rgb(85 117 91 / .12); }
+.auth-error { margin: 2px 0 0; padding: 9px 12px; border-radius: 3px; background: #fbeceb; color: #9a3a33; font: 600 12px var(--sans); }
+.sign-in-button:disabled { opacity: .6; cursor: progress; }
+.notice { margin: 0 0 16px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 3px; background: #f3f7f1; color: #3d5a43; font: 600 12px var(--sans); }
+.text-button:disabled { opacity: .35; cursor: not-allowed; }
+.cover-fallback { display: block; width: 30px; height: 40px; flex: 0 0 30px; border-radius: 2px; background: #edf0e8; }

@@ -1,10 +1,11 @@
 import express from "express";
 import Member from "../models/Member.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
-// Get all members
-router.get("/", async (req, res) => {
+// Get all members (librarians only)
+router.get("/", requireAuth, requireRole("librarian"), async (req, res) => {
     try {
         const members = await Member.find();
         res.json(members);
@@ -13,8 +14,8 @@ router.get("/", async (req, res) => {
     }
 });
 
-// Add a new member
-router.post("/", async (req, res) => {
+// Add a new member (librarians only)
+router.post("/", requireAuth, requireRole("librarian"), async (req, res) => {
     try {
         const member = new Member({
             user_id: req.body.user_id,
