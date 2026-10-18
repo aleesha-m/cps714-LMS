@@ -13,10 +13,45 @@ router.use(requireAuth);
 // Active reservations: librarians see everyone's, members only their own.
 router.get("/", async (req, res) => {
     try {
-        const filter = { status: "active" };
-        if (req.user.role !== "librarian") filter.user_id = req.user.profile_id;
-        const reservations = await Reservation.find(filter).sort({ reserved_date: 1 });
-        res.json(reservations);
+        const allReservations = await Reservation.find({ status: "active" }).sort({ reserved_date: 1 });
+        const reservations = req.user.role === "librarian"
+            ? allReservations
+            : allReservations.filter((reservation) => reservation.user_id === req.user.profile_id);
+        const ISBNs = [...new Set(reservations.map((reservation) => reservation.ISBN))];
+        const [books, activeLoans] = await Promise.all([
+            Book.find({ ISBN: { $in: ISBNs } }).select("ISBN available").lean(),
+            Loan.find({ ISBN: { $in: ISBNs }, return_date: null }).select("ISBN due_date").lean()
+        ]);
+        const booksByISBN = new Map(books.map((book) => [book.ISBN, book]));
+        const loansByISBN = new Map(activeLoans.map((loan) => [loan.ISBN, loan]));
+        const positions = new Map();
+        for (const reservation of allReservations) {
+            const position = (positions.get(reservation.ISBN) ?? 0) + 1;
+            positions.set(reservation.ISBN, position);
+            positions.set(reservation.reservation_id, position);
+        }
+        const now = new Date();
+        const loanPeriodMs = 14 * 24 * 60 * 60 * 1000;
+
+        res.json(reservations.map((reservation) => {
+            const position = positions.get(reservation.reservation_id);
+
+            const book = booksByISBN.get(reservation.ISBN);
+            const activeLoan = loansByISBN.get(reservation.ISBN);
+            const dueDate = activeLoan ? new Date(activeLoan.due_date) : null;
+            const availableAt = book?.available && position === 1
+                ? now
+                : dueDate && dueDate > now
+                    ? dueDate
+                    : now;
+            const estimatedReadyDate = new Date(availableAt.getTime() + Math.max(0, position - 1) * loanPeriodMs);
+
+            return {
+                ...reservation.toObject(),
+                queue_position: position,
+                estimated_ready_date: estimatedReadyDate
+            };
+        }));
     } catch (error) {
         res.status(500).json({ message: error.message });
     }

@@ -217,6 +217,20 @@
 .full-table .book-cell img { width: 34px; height: 46px; }
 .empty-state { padding: 35px; color: #899087; text-align: center; font-size: 12px; }
 .generic-list { padding: 0 18px; }
+.utility-content { padding: 0 22px 8px; }
+.utility-section { padding: 22px 0; border-bottom: 1px solid #f0f1ed; }
+.utility-section:last-child { border-bottom: 0; }
+.utility-section h2 { margin: 0 0 6px; color: #344036; font: 600 13px var(--sans); }
+.utility-section > p { margin-bottom: 15px; color: #8d948a; font-size: 11px; line-height: 1.6; }
+.account-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 28px; margin: 22px 0 0; }
+.account-grid div { min-width: 0; }
+.account-grid dt { margin-bottom: 6px; color: #999f96; font-size: 10px; }
+.account-grid dd { overflow-wrap: anywhere; color: #3e493f; font-size: 12px; }
+.settings-control { max-width: 520px; min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #505b50; font-size: 11px; }
+.help-content details { border-top: 1px solid #f0f1ed; }
+.help-content summary { padding: 14px 0; color: #475247; cursor: pointer; font-size: 11px; font-weight: 600; }
+.help-content details p { max-width: 680px; padding: 0 0 14px; color: #858d83; font-size: 11px; line-height: 1.7; }
+.support-contact .button { min-height: 34px; text-decoration: none; }
 .generic-row { min-height: 66px; gap: 14px; border-bottom: 1px solid #f0f1ed; }
 .generic-row:last-child { border-bottom: 0; }
 .generic-row > div:nth-child(2) { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
@@ -226,6 +240,10 @@
 .member-active { display: inline-flex; align-items: center; gap: 6px; min-width: 70px; color: #788276; font-size: 10px; }
 .member-active i { background: #7b9d79; }
 .return-button { margin-left: auto; }
+.reservation-timing { min-width: 142px; display: flex; flex-direction: column; gap: 5px; }
+.reservation-timing strong { color: #667466; font-size: 10px; font-weight: 600; }
+.reservation-timing strong.ready-now { color: #5f8064; }
+.reservation-timing span { color: #969c92; font-size: 9px; }
 .nav-scrim { display: none; }
 
 @keyframes rise-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
@@ -301,8 +319,12 @@
   .genre-select { flex: 1; }
   .export-button { margin-left: 0; }
   .generic-list { padding: 0 12px; }
+  .utility-content { padding-right: 14px; padding-left: 14px; }
+  .account-grid { grid-template-columns: 1fr; gap: 15px; }
+  .settings-control { align-items: flex-start; flex-direction: column; }
   .generic-row { gap: 9px; }
   .member-since { display: none; }
+  .reservation-timing { min-width: 112px; }
   .return-button { max-width: 100px; font-size: 9px; }
 }
 
@@ -335,11 +357,14 @@
 .list-toolbar { flex-wrap: wrap; }
 .results-bar { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 18px; border-bottom: 1px solid #f0f1ed; color: #868d83; font-size: 10px; }
 .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 28px 20px; padding: 22px 18px 28px; }
-.book-card { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.book-card .book-cover { margin-bottom: 7px; transition: transform .18s, box-shadow .18s; }
-.book-card:hover .book-cover, .book-card:focus-visible .book-cover { transform: translateY(-3px); box-shadow: 0 2px 4px rgb(40 53 43 / .12), 0 14px 22px -12px rgb(40 53 43 / .35); }
+.book-card { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.book-card-open { width: 100%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 0; border: 0; border-radius: 3px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.book-card-open .book-cover { margin-bottom: 7px; transition: transform .18s, box-shadow .18s; }
+.book-card-open:hover .book-cover, .book-card-open:focus-visible .book-cover { transform: translateY(-3px); box-shadow: 0 2px 4px rgb(40 53 43 / .12), 0 14px 22px -12px rgb(40 53 43 / .35); }
 .book-card-title { max-width: 100%; display: -webkit-box; overflow: hidden; color: #404a40; font: 600 12px/1.35 var(--sans); -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .book-card-author { max-width: 100%; overflow: hidden; color: #8f958b; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.book-card-checkout { min-height: 28px; margin-top: 5px; }
+.book-card-queue { margin-top: 8px; color: #758575; font-size: 10px; }
 
 /* Covers */
 .book-cover { display: block; position: relative; flex: 0 0 auto; overflow: hidden; aspect-ratio: 2 / 3; border-radius: 3px; background: #edf0e8; box-shadow: 0 1px 2px rgb(40 53 43 / .12), 0 8px 16px -10px rgb(40 53 43 / .3); }

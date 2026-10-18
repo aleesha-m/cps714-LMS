@@ -23,13 +23,20 @@ import {
   UsersRound,
 } from 'lucide-react'
 import { api, ApiError, type ApiBook, type ApiLoan, type ApiMember, type ApiReservation, type BookInput, type Role, type User } from './api'
-import { filterBooks, sortBooks, sortOptions, statusClass, toCatalogBook, type AvailabilityFilter, type SortKey } from './books'
+import { canCheckOut, filterBooks, sortBooks, sortOptions, statusClass, toCatalogBook, type AvailabilityFilter, type SortKey } from './books'
 import BookCover from './components/BookCover'
 import BookDetailModal from './components/BookDetailModal'
 import BookFormModal from './components/BookFormModal'
 import './App.css'
 
-type Section = 'Overview' | 'Catalog' | 'Members' | 'Loans' | 'History' | 'Reservations'
+type Section = 'Overview' | 'Catalog' | 'Members' | 'Loans' | 'History' | 'Reservations' | 'Settings' | 'Help & support'
+type LandingSection = 'Overview' | 'Catalog' | 'Loans' | 'History'
+
+function getLandingSection(role: Role, profileId: string): LandingSection {
+  const saved = localStorage.getItem(`lms-default-view:${profileId}`)
+  const allowed: LandingSection[] = role === 'librarian' ? ['Overview', 'Catalog', 'Loans'] : ['Catalog', 'Loans', 'History']
+  return allowed.includes(saved as LandingSection) ? saved as LandingSection : role === 'librarian' ? 'Overview' : 'Catalog'
+}
 
 function sectionLabel(section: Section, isLibrarian: boolean) {
   switch (section) {
@@ -48,6 +55,8 @@ function sectionBlurb(section: Section, isLibrarian: boolean) {
     case 'Loans': return isLibrarian ? 'Keep track of checkouts, returns, and what’s due.' : 'Books you have checked out, and when they’re due back.'
     case 'History': return 'Every book you have borrowed, and when it went back.'
     case 'Reservations': return isLibrarian ? 'Members waiting for books that are checked out.' : 'Books you are waiting for. We will hold each one when it comes back.'
+    case 'Settings': return 'Manage your account details and sign-in destination.'
+    case 'Help & support': return 'Find help with borrowing, catalog tasks, and account access.'
     default: return ''
   }
 }
@@ -83,6 +92,8 @@ function App() {
   const [apiLoans, setApiLoans] = useState<ApiLoan[]>([])
   const [apiMembers, setApiMembers] = useState<ApiMember[]>([])
   const [apiReservations, setApiReservations] = useState<ApiReservation[]>([])
+  const [dashboardNow, setDashboardNow] = useState(0)
+  const [defaultView, setDefaultView] = useState<LandingSection>('Catalog')
   const [activeSection, setActiveSection] = useState<Section>('Overview')
   const [query, setQuery] = useState('')
   const [genre, setGenre] = useState('All genres')
@@ -123,19 +134,52 @@ function App() {
           initials: initialsOf(member),
           book: apiBooks.find((b) => b.ISBN === loan.ISBN)?.title ?? loan.ISBN,
           due: formatDue(loan.due_date),
-          overdue: new Date(loan.due_date).getTime() < Date.now(),
+          overdue: new Date(loan.due_date).getTime() < dashboardNow,
           color: avatarColors[index % 3],
         }
       }),
-    [apiLoans, apiBooks, apiMembers, user, isLibrarian],
+    [apiLoans, apiBooks, apiMembers, user, isLibrarian, dashboardNow],
   )
   const dueSoon = loanRows.slice(0, 3)
+  const overdueCount = loanRows.filter((loan) => loan.overdue).length
+  const circulationByDay = useMemo(() => {
+    const lastDay = new Date(dashboardNow)
+    lastDay.setHours(0, 0, 0, 0)
+    const firstDay = new Date(lastDay)
+    firstDay.setDate(firstDay.getDate() - 6)
+    const checkoutsByDay = new Map<number, number>()
+
+    for (const loan of apiLoans) {
+      const loanDay = new Date(loan.loan_date)
+      loanDay.setHours(0, 0, 0, 0)
+      const timestamp = loanDay.getTime()
+      if (timestamp >= firstDay.getTime() && timestamp <= lastDay.getTime()) {
+        checkoutsByDay.set(timestamp, (checkoutsByDay.get(timestamp) ?? 0) + 1)
+      }
+    }
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(firstDay)
+      day.setDate(firstDay.getDate() + index)
+      return {
+        label: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        count: checkoutsByDay.get(day.getTime()) ?? 0,
+      }
+    })
+  }, [apiLoans, dashboardNow])
+  const circulationTotal = circulationByDay.reduce((total, day) => total + day.count, 0)
+  const circulationScale = Math.max(4, Math.ceil(Math.max(...circulationByDay.map((day) => day.count)) / 4) * 4)
+  const circulationTicks = [4, 3, 2, 1, 0].map((step) => (circulationScale * step) / 4)
+  const circulationPoints = circulationByDay
+    .map((day, index) => `${index * (600 / (circulationByDay.length - 1))},${140 - (day.count / circulationScale) * 120}`)
+    .join(' ')
+  const circulationAreaPoints = `0,140 ${circulationPoints} 600,140`
   const historyRows = useMemo(
     () => [...apiLoans]
       .sort((x, y) => new Date(y.loan_date).getTime() - new Date(x.loan_date).getTime())
       .map((loan) => {
         const book = apiBooks.find((b) => b.ISBN === loan.ISBN)
-        const overdue = !loan.return_date && new Date(loan.due_date).getTime() < Date.now()
+        const overdue = !loan.return_date && new Date(loan.due_date).getTime() < dashboardNow
         return {
           loanId: loan.loan_id,
           title: book?.title ?? loan.ISBN,
@@ -146,7 +190,7 @@ function App() {
           status: loan.return_date ? `Returned ${formatDate(loan.return_date)}` : overdue ? `Overdue since ${formatDate(loan.due_date)}` : `Due ${formatDue(loan.due_date)}`,
         }
       }),
-    [apiLoans, apiBooks],
+    [apiLoans, apiBooks, dashboardNow],
   )
   const reservationRows = useMemo(() => {
     // Librarians receive every reservation, oldest first, so counting per book gives each one its place
@@ -156,7 +200,7 @@ function App() {
       const book = apiBooks.find((b) => b.ISBN === reservation.ISBN)
       const counted = (placeInLine.get(reservation.ISBN) ?? 0) + 1
       placeInLine.set(reservation.ISBN, counted)
-      const position = isLibrarian ? counted : book?.myPosition ?? counted
+      const position = reservation.queue_position
       const memberName = reservation.user_id === user?.profile_id
         ? user.name
         : apiMembers.find((m) => m.user_id === reservation.user_id)?.name ?? reservation.user_id
@@ -169,10 +213,11 @@ function App() {
         reserved: formatDate(reservation.reserved_date),
         position,
         ready: Boolean(book?.available) && position === 1,
+        estimatedReady: reservation.estimated_ready_date,
         member: memberName,
       }
     })
-  }, [apiReservations, apiBooks, apiMembers, user, isLibrarian])
+  }, [apiReservations, apiBooks, apiMembers, user])
 
   const loadData = useCallback(async (current: User) => {
     try {
@@ -182,6 +227,7 @@ function App() {
         current.role === 'librarian' ? api.members() : Promise.resolve<ApiMember[]>([]),
         api.reservations(),
       ])
+      setDashboardNow(Date.now())
       setApiBooks(booksData)
       setApiLoans(loansData)
       setApiMembers(membersData)
@@ -200,7 +246,9 @@ function App() {
     api.me()
       .then((current) => {
         setUser(current)
-        setActiveSection(current.role === 'librarian' ? 'Overview' : 'Catalog')
+        const landing = getLandingSection(current.role, current.profile_id)
+        setDefaultView(landing)
+        setActiveSection(landing)
       })
       .catch(() => undefined)
       .finally(() => setCheckingSession(false))
@@ -228,7 +276,9 @@ function App() {
             code: field('code'),
           })
       setUser(signedIn)
-      setActiveSection(signedIn.role === 'librarian' ? 'Overview' : 'Catalog')
+      const landing = getLandingSection(signedIn.role, signedIn.profile_id)
+      setDefaultView(landing)
+      setActiveSection(landing)
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : 'Something went wrong')
     } finally {
@@ -325,8 +375,27 @@ function App() {
     if (await runAction(() => api.deleteBook(isbn), 'Book deleted.')) setSelectedIsbn(null)
   }
 
-  const checkOutBook = (isbn: string) => runAction(() => api.checkOut(isbn), 'Book checked out.')
-  const reserveBook = (isbn: string) => runAction(() => api.reserve(isbn), 'Book reserved. You will be next in line when it comes back.')
+  async function checkOutBook(isbn: string) {
+    const checkedOut = await runAction(() => api.checkOut(isbn), 'Book checked out.')
+    if (checkedOut && !isLibrarian) {
+      setSelectedIsbn(null)
+      goTo('Loans')
+    }
+  }
+
+  function changeDefaultView(view: LandingSection) {
+    if (!user) return
+    setDefaultView(view)
+    localStorage.setItem(`lms-default-view:${user.profile_id}`, view)
+    setNotice('Default page saved for this browser.')
+  }
+  async function reserveBook(isbn: string) {
+    const reserved = await runAction(() => api.reserve(isbn), 'Book reserved. Your place in line is now available in Reservations.')
+    if (reserved && !isLibrarian) {
+      setSelectedIsbn(null)
+      goTo('Reservations')
+    }
+  }
   const cancelReservation = (reservationId: string) => runAction(() => api.cancelReservation(reservationId), 'Reservation cancelled.')
 
   if (checkingSession) return null
@@ -436,8 +505,8 @@ function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <button className="nav-link"><Settings2 size={17} /><span>Settings</span></button>
-          <button className="nav-link"><CircleHelp size={17} /><span>Help & support</span></button>
+          <button className={`nav-link ${activeSection === 'Settings' ? 'nav-link-active' : ''}`} onClick={() => goTo('Settings')}><Settings2 size={17} /><span>Settings</span></button>
+          <button className={`nav-link ${activeSection === 'Help & support' ? 'nav-link-active' : ''}`} onClick={() => goTo('Help & support')}><CircleHelp size={17} /><span>Help & support</span></button>
           <div className="sidebar-user">
             <div className="user-avatar">{initialsOf(user.name)}</div>
             <div className="user-info"><strong>{user.name}</strong><span>{isLibrarian ? 'Librarian' : 'Member'}</span></div>
@@ -466,10 +535,10 @@ function App() {
                 <button className="button button-primary add-button" onClick={openAddBook}><Plus size={16} /> Add a book</button>
               </div>
               <section className="stats-grid" aria-label="Library statistics">
-                <article className="stat-card stat-card-featured"><div className="stat-top"><span>Total books</span><span className="stat-icon"><BookOpen size={17} /></span></div><strong className="stat-number">12,486</strong><div className="stat-foot"><span className="stat-trend"><ArrowUpRight size={14} /> 8.2%</span><span>vs. last month</span><span className="sparkline sparkline-green"><i /><i /><i /><i /><i /><i /><i /><i /></span></div></article>
-                <article className="stat-card"><div className="stat-top"><span>On loan</span><span className="stat-icon stat-icon-blue"><ArrowDownToLine size={17} /></span></div><strong className="stat-number">1,284</strong><div className="stat-foot"><span className="stat-trend stat-trend-neutral">+ 3.1%</span><span>vs. last month</span><span className="sparkline sparkline-blue"><i /><i /><i /><i /><i /><i /><i /><i /></span></div></article>
-                <article className="stat-card"><div className="stat-top"><span>Active members</span><span className="stat-icon stat-icon-yellow"><UsersRound size={17} /></span></div><strong className="stat-number">3,842</strong><div className="stat-foot"><span className="stat-trend"><ArrowUpRight size={14} /> 12.4%</span><span>vs. last month</span><span className="sparkline sparkline-yellow"><i /><i /><i /><i /><i /><i /><i /><i /></span></div></article>
-                <article className="stat-card"><div className="stat-top"><span>Overdue</span><span className="stat-icon stat-icon-rose"><Clock3 size={17} /></span></div><strong className="stat-number">24</strong><div className="stat-foot"><span className="stat-trend stat-trend-down">↓ 2.6%</span><span>vs. last month</span><span className="sparkline sparkline-rose"><i /><i /><i /><i /><i /><i /><i /><i /></span></div></article>
+                <article className="stat-card stat-card-featured"><div className="stat-top"><span>Total books</span><span className="stat-icon"><BookOpen size={17} /></span></div><strong className="stat-number">{books.length.toLocaleString()}</strong><div className="stat-foot"><span>Catalog records</span></div></article>
+                <article className="stat-card"><div className="stat-top"><span>On loan</span><span className="stat-icon stat-icon-blue"><ArrowDownToLine size={17} /></span></div><strong className="stat-number">{loanRows.length.toLocaleString()}</strong><div className="stat-foot"><span>Currently checked out</span></div></article>
+                <article className="stat-card"><div className="stat-top"><span>Registered members</span><span className="stat-icon stat-icon-yellow"><UsersRound size={17} /></span></div><strong className="stat-number">{apiMembers.length.toLocaleString()}</strong><div className="stat-foot"><span>Member records</span></div></article>
+                <article className="stat-card"><div className="stat-top"><span>Overdue</span><span className="stat-icon stat-icon-rose"><Clock3 size={17} /></span></div><strong className="stat-number">{overdueCount.toLocaleString()}</strong><div className="stat-foot"><span>Past due and not returned</span></div></article>
               </section>
 
               <section className="dashboard-columns">
@@ -485,7 +554,24 @@ function App() {
               </section>
 
               <section className="bottom-grid">
-                <div className="panel circulation-panel"><div className="panel-heading"><div><h2>Circulation</h2><p>Books checked out over the past 7 days</p></div><button className="select-button">This week <ChevronDown size={14} /></button></div><div className="chart-area"><div className="chart-y-labels"><span>120</span><span>90</span><span>60</span><span>30</span><span>0</span></div><div className="chart"><div className="chart-grid"><i /><i /><i /><i /><i /></div><svg viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label="Circulation trend rising through the week"><defs><linearGradient id="chart-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#70947a" stopOpacity=".2" /><stop offset="100%" stopColor="#70947a" stopOpacity="0" /></linearGradient></defs><path className="chart-area-fill" d="M0 119 C38 112 42 97 85 103 S144 115 171 82 S223 90 257 70 S304 83 344 60 S390 76 427 48 S480 68 515 35 S564 51 600 20 L600 160 L0 160Z" /><path className="chart-line" d="M0 119 C38 112 42 97 85 103 S144 115 171 82 S223 90 257 70 S304 83 344 60 S390 76 427 48 S480 68 515 35 S564 51 600 20" /></svg><div className="chart-x-labels"><span>Fri</span><span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span></div></div></div></div>
+                <div className="panel circulation-panel">
+                  <div className="panel-heading">
+                    <div><h2>Circulation</h2><p>{circulationTotal.toLocaleString()} checkouts by loan date in the last 7 days</p></div>
+                    <span className="select-button">Last 7 days <ChevronDown size={14} /></span>
+                  </div>
+                  <div className="chart-area">
+                    <div className="chart-y-labels">{circulationTicks.map((tick) => <span key={tick}>{tick.toLocaleString()}</span>)}</div>
+                    <div className="chart">
+                      <div className="chart-grid"><i /><i /><i /><i /><i /></div>
+                      <svg viewBox="0 0 600 160" preserveAspectRatio="none" role="img" aria-label={`Daily checkouts for the last seven days, ${circulationTotal} total`}>
+                        <defs><linearGradient id="chart-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#70947a" stopOpacity=".2" /><stop offset="100%" stopColor="#70947a" stopOpacity="0" /></linearGradient></defs>
+                        <polygon className="chart-area-fill" points={circulationAreaPoints} />
+                        <polyline className="chart-line" points={circulationPoints} />
+                      </svg>
+                      <div className="chart-x-labels">{circulationByDay.map((day) => <span key={day.label}>{day.label}</span>)}</div>
+                    </div>
+                  </div>
+                </div>
                 <div className="panel quick-panel"><div className="panel-heading"><div><h2>Quick actions</h2><p>Common tasks, one click away</p></div></div><button className="quick-action" onClick={openAddBook}><span className="quick-icon quick-icon-green"><Plus size={17} /></span><span><strong>Add new book</strong><small>Add a title to your catalog</small></span><ArrowRight size={15} /></button><button className="quick-action" onClick={() => setActiveSection('Members')}><span className="quick-icon quick-icon-yellow"><UsersRound size={17} /></span><span><strong>Register a member</strong><small>Welcome someone new</small></span><ArrowRight size={15} /></button><button className="quick-action" onClick={() => setActiveSection('Loans')}><span className="quick-icon quick-icon-blue"><ChartNoAxesCombined size={17} /></span><span><strong>View loan report</strong><small>See what’s moving</small></span><ArrowRight size={15} /></button></div>
               </section>
               <footer className="dashboard-footer"><span>Made for the love of reading.</span><span>COMMONPLACE LIBRARY SYSTEM <i>·</i> 2026</span></footer>
@@ -505,6 +591,59 @@ function App() {
                 )}
               </div>
               <div className="panel section-panel">
+                {activeSection === 'Settings' ? (
+                  <div className="utility-content">
+                    <section className="utility-section">
+                      <h2>Account</h2>
+                      <p>Your library account information.</p>
+                      <dl className="account-grid">
+                        <div><dt>Name</dt><dd>{user.name}</dd></div>
+                        <div><dt>Email</dt><dd>{user.email}</dd></div>
+                        <div><dt>Account type</dt><dd>{isLibrarian ? 'Librarian' : 'Member'}</dd></div>
+                        <div><dt>Library ID</dt><dd className="book-id">{user.profile_id}</dd></div>
+                      </dl>
+                    </section>
+                    <section className="utility-section">
+                      <h2>Preferences</h2>
+                      <p>Choose the page to open after you sign in. This setting is saved in this browser.</p>
+                      <label className="settings-control" htmlFor="default-view">
+                        <span>Default page</span>
+                        <select id="default-view" className="genre-select" value={defaultView} onChange={(event) => changeDefaultView(event.target.value as LandingSection)}>
+                          {isLibrarian ? (
+                            <><option value="Overview">Overview</option><option value="Catalog">Catalog</option><option value="Loans">Loans</option></>
+                          ) : (
+                            <><option value="Catalog">Catalog</option><option value="Loans">My loans</option><option value="History">Borrowing history</option></>
+                          )}
+                        </select>
+                      </label>
+                    </section>
+                  </div>
+                ) : activeSection === 'Help & support' ? (
+                  <div className="utility-content help-content">
+                    <section className="utility-section">
+                      <h2>{isLibrarian ? 'Librarian guide' : 'Member guide'}</h2>
+                      {isLibrarian ? (
+                        <>
+                          <details><summary>How do I add or update a book?</summary><p>Open Catalog and choose Add a book. To edit an existing title, open its details and choose Edit.</p></details>
+                          <details><summary>How do I check in a book?</summary><p>Open Loans and choose Mark returned on the loan. The book becomes available to the next person in its reservation queue.</p></details>
+                          <details><summary>How do reservations work?</summary><p>Members can reserve checked-out books. Reservations are served in order; the first member can check out the book once it is available.</p></details>
+                        </>
+                      ) : (
+                        <>
+                          <details><summary>How do I check out a book?</summary><p>In Catalog, choose Check out on an available book, or open its details and choose Check out. You will be taken to My loans after checkout.</p></details>
+                          <details><summary>What if a book is already checked out?</summary><p>Open the book and choose Reserve. You can see your place in line under My reservations.</p></details>
+                          <details><summary>Where can I see my due dates?</summary><p>Open My loans to see active checkouts and due dates. Returned books appear in Borrowing history.</p></details>
+                        </>
+                      )}
+                    </section>
+                    <section className="utility-section support-contact">
+                      <h2>Still need help?</h2>
+                      <p>Contact the library support team for account or borrowing assistance.</p>
+                      <a className="button button-secondary" href="mailto:hello@commonplace.library">Email support <ArrowRight size={15} /></a>
+                    </section>
+                  </div>
+                ) : (
+                  <>
                 <div className="list-toolbar">
                   <label className="search-field">
                     <Search size={17} />
@@ -551,14 +690,27 @@ function App() {
                       </p>
                     ) : (
                       <div className="book-grid">
-                        {filteredBooks.map((book) => (
-                          <button key={book.id} className="book-card" onClick={() => openBook(book.id)} aria-label={`${book.title} by ${book.author}. ${book.status}. View details`}>
-                            <BookCover title={book.title} cover={book.cover} />
-                            <strong className="book-card-title">{book.title}</strong>
-                            <span className="book-card-author">{book.author}</span>
-                            <span className={`status ${statusClass(book.status)}`}><i />{book.status}</span>
-                          </button>
-                        ))}
+                        {filteredBooks.map((book) => {
+                          const hasLoan = myActiveLoanIsbns.has(book.id)
+                          return (
+                            <article key={book.id} className="book-card">
+                              <button className="book-card-open" onClick={() => openBook(book.id)} aria-label={`${book.title} by ${book.author}. ${book.status}. View details`}>
+                                <BookCover title={book.title} cover={book.cover} />
+                                <strong className="book-card-title">{book.title}</strong>
+                                <span className="book-card-author">{book.author}</span>
+                                <span className={`status ${statusClass(book.status)}`}><i />{book.status}</span>
+                              </button>
+                              {!isLibrarian && !hasLoan && canCheckOut(book) && (
+                                <button className="text-button book-card-checkout" disabled={working} onClick={() => void checkOutBook(book.id)}>Check out <ArrowRight size={14} /></button>
+                              )}
+                              {!isLibrarian && !hasLoan && !canCheckOut(book) && (
+                                book.myPosition === null
+                                  ? <button className="text-button book-card-checkout" disabled={working} onClick={() => void reserveBook(book.id)}><Bookmark size={14} /> Reserve</button>
+                                  : <span className="book-card-queue">Your place: #{book.myPosition}</span>
+                              )}
+                            </article>
+                          )
+                        })}
                       </div>
                     )}
                   </>
@@ -618,7 +770,10 @@ function App() {
                       <div className="generic-row" key={row.reservationId}>
                         <BookCover title={row.title} cover={row.cover} size="sm" />
                         <div><strong>{row.title}</strong><span>{isLibrarian ? `Reserved by ${row.member} on ${row.reserved}` : `Reserved on ${row.reserved}`}</span></div>
-                        <span className={`loan-due ${row.ready ? 'ready-now' : ''}`}>{row.ready ? 'Ready to check out' : `Number ${row.position} in line`}</span>
+                        <div className="reservation-timing">
+                          <strong className={row.ready ? 'ready-now' : ''}>{row.ready ? 'Ready to check out' : `Number ${row.position} in line`}</strong>
+                          <span>{row.ready ? 'Available now' : `Est. ready ${formatDate(row.estimatedReady)}`}</span>
+                        </div>
                         <div className="row-actions">
                           {!isLibrarian && row.ready && <button className="text-button" disabled={working} onClick={() => void checkOutBook(row.isbn)}>Check out</button>}
                           <button className="text-button" disabled={working} onClick={() => void cancelReservation(row.reservationId)}>Cancel</button>
@@ -626,6 +781,8 @@ function App() {
                       </div>
                     ))}
                   </div>
+                )}
+                  </>
                 )}
               </div>
               <footer className="dashboard-footer"><span>Made for the love of reading.</span><span>COMMONPLACE LIBRARY SYSTEM <i>·</i> 2026</span></footer>

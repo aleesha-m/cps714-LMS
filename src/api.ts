@@ -37,6 +37,8 @@ export interface ApiReservation {
   ISBN: string
   reserved_date: string
   status: 'active' | 'fulfilled' | 'cancelled'
+  queue_position: number
+  estimated_ready_date: string
 }
 
 export interface ApiLoan {
