@@ -4,7 +4,7 @@ A library management system project for CPS714. The application includes a React
 
 ## Project Status
 
-Sign-in uses MongoDB-backed sessions and bcrypt-hashed passwords. The dashboard's library records are still sample frontend data; its management API routes are protected for librarians.
+Sign-in uses MongoDB-backed sessions and bcrypt-hashed passwords. Librarians can add, edit, and delete books; everyone can search, filter, and sort the catalog; members can reserve books and view their borrowing history.
 
 ## Getting Started
 

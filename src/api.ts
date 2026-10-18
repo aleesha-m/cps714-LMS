@@ -9,12 +9,34 @@ export interface User {
 }
 
 export interface ApiBook {
+  _id: string
   ISBN: string
   title: string
   author: string
   genre: string
   available: boolean
   cover?: string
+  description?: string
+  // How many members are queued for this book, and this member's place in that queue (1 = next).
+  queueLength: number
+  myPosition: number | null
+}
+
+export interface BookInput {
+  ISBN: string
+  title: string
+  author: string
+  genre: string
+  cover: string
+  description: string
+}
+
+export interface ApiReservation {
+  reservation_id: string
+  user_id: string
+  ISBN: string
+  reserved_date: string
+  status: 'active' | 'fulfilled' | 'cancelled'
 }
 
 export interface ApiLoan {
@@ -75,4 +97,11 @@ export const api = {
   members: () => request<ApiMember[]>('/members'),
   checkOut: (ISBN: string) => request<ApiLoan>('/loans', 'POST', { ISBN }),
   returnLoan: (loanId: string) => request<unknown>(`/loans/${encodeURIComponent(loanId)}/return`, 'PUT'),
+  addBook: (input: BookInput) => request<ApiBook>('/books', 'POST', input),
+  updateBook: (isbn: string, input: Partial<Omit<BookInput, 'ISBN'>>) =>
+    request<ApiBook>(`/books/${encodeURIComponent(isbn)}`, 'PUT', input),
+  deleteBook: (isbn: string) => request<{ message: string }>(`/books/${encodeURIComponent(isbn)}`, 'DELETE'),
+  reservations: () => request<ApiReservation[]>('/reservations'),
+  reserve: (ISBN: string) => request<ApiReservation>('/reservations', 'POST', { ISBN }),
+  cancelReservation: (id: string) => request<unknown>(`/reservations/${encodeURIComponent(id)}`, 'DELETE'),
 }

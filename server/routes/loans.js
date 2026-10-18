@@ -3,6 +3,7 @@ import express from "express";
 import Loan from "../models/Loan.js";
 import Book from "../models/Book.js";
 import Member from "../models/Member.js";
+import Reservation from "../models/Reservation.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -49,6 +50,16 @@ router.post("/", async (req, res) => {
             due_date = custom;
         }
 
+        // If someone has reserved this book, only the first person in the queue can take it.
+        const book = await Book.findOne({ ISBN });
+        if (!book) return res.status(404).json({ message: "Book not found" });
+        if (book.available) {
+            const next = await Reservation.findOne({ ISBN, status: "active" }).sort({ reserved_date: 1 });
+            if (next && next.user_id !== user_id) {
+                return res.status(400).json({ message: "This book is reserved for another member" });
+            }
+        }
+
         // Atomically claim the book so two people can't check out the same copy.
         reservedBook = await Book.findOneAndUpdate(
             { ISBN, available: true },
@@ -70,6 +81,12 @@ router.post("/", async (req, res) => {
             due_date,
             return_date: null
         });
+
+        // Checking the book out uses up this member's reservation for it, if they had one.
+        await Reservation.updateOne(
+            { user_id, ISBN, status: "active" },
+            { status: "fulfilled", resolved_date: new Date() }
+        );
 
         res.status(201).json(loan);
     } catch (error) {
