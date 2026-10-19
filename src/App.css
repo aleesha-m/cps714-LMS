@@ -237,8 +237,11 @@
 .generic-row > div:nth-child(2) strong { overflow: hidden; color: #455046; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .generic-row > div:nth-child(2) span { color: #999e95; font-size: 10px; }
 .member-since { min-width: 120px; color: #858d83; font-size: 10px; }
+.member-id { color: #9da398; font: 9px var(--mono); }
 .member-active { display: inline-flex; align-items: center; gap: 6px; min-width: 70px; color: #788276; font-size: 10px; }
 .member-active i { background: #7b9d79; }
+.member-role { min-width: 95px; color: #667d68; font-size: 10px; }
+.member-role-librarian { color: #8b7043; }
 .return-button { margin-left: auto; }
 .reservation-timing { min-width: 142px; display: flex; flex-direction: column; gap: 5px; }
 .reservation-timing strong { color: #667466; font-size: 10px; font-weight: 600; }
@@ -419,14 +422,23 @@
 .delete-confirm p { margin: 0 0 10px; padding: 11px 13px; border-radius: 3px; background: #fbeceb; color: #6b2f2a; font-size: 12px; line-height: 1.6; }
 
 .modal-form { width: min(100%, 660px); }
+.member-form { display: grid; gap: 16px; margin-top: 22px; }
+.member-form-note { color: #8f958b; font-size: 10px; line-height: 1.6; }
+.account-type-field { width: 100%; margin: 0; padding: 0; border: 0; }
+.account-type-field legend { margin-bottom: 4px; color: #354037; font-size: 12px; font-weight: 600; }
+.account-type-control { width: min(100%, 420px); display: grid; grid-template-columns: 1fr 1fr; gap: 2px; padding: 2px; border: 1px solid #e0e5dc; border-radius: 4px; background: #f2f5ed; }
+.account-type-option { min-height: 32px; display: grid; place-items: center; margin: 0; border: 1px solid transparent; border-radius: 3px; color: #788276; cursor: pointer; font-size: 11px; font-weight: 500; transition: color .16s, background .16s, border-color .16s, box-shadow .16s; }
+.account-type-option input { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); clip-path: inset(50%); white-space: nowrap; border: 0; opacity: 0; }
+.account-type-option-selected { border-color: #dfe7da; color: #365b40; background: #fff; box-shadow: 0 1px 3px rgb(40 53 43 / .08); font-weight: 600; }
+.account-type-option:focus-within { outline: 2px solid #8aa28a; outline-offset: 1px; }
 .book-form { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 18px 26px; margin-top: 22px; }
 .book-form-fields { display: flex; flex-direction: column; gap: 7px; }
-.book-form-fields label { margin-top: 5px; color: #354037; font-size: 12px; font-weight: 600; }
-.book-form-fields input, .book-form-fields textarea { width: 100%; padding: 0 13px; border: 1px solid #d9ddd4; border-radius: 3px; background: #fff; color: var(--ink); font: 13px var(--sans); outline: none; transition: border-color .2s, box-shadow .2s; }
-.book-form-fields input { height: 42px; }
-.book-form-fields textarea { padding: 11px 13px; resize: vertical; line-height: 1.55; }
-.book-form-fields input:focus, .book-form-fields textarea:focus { border-color: var(--moss); box-shadow: 0 0 0 3px rgb(85 117 91 / .12); }
-.book-form-fields input:disabled { color: #858d82; background: #f4f5f1; }
+.book-form-fields > label { margin-top: 5px; color: #354037; font-size: 12px; font-weight: 600; }
+.book-form-fields > input, .book-form-fields > textarea { width: 100%; padding: 0 13px; border: 1px solid #d9ddd4; border-radius: 3px; background: #fff; color: var(--ink); font: 13px var(--sans); outline: none; transition: border-color .2s, box-shadow .2s; }
+.book-form-fields > input { height: 42px; }
+.book-form-fields > textarea { padding: 11px 13px; resize: vertical; line-height: 1.55; }
+.book-form-fields > input:focus, .book-form-fields > textarea:focus { border-color: var(--moss); box-shadow: 0 0 0 3px rgb(85 117 91 / .12); }
+.book-form-fields > input:disabled { color: #858d82; background: #f4f5f1; }
 .book-form-fields small { color: #8f958b; font-size: 10px; }
 .optional { color: #9aa096; font-weight: 500; }
 .book-form-preview { display: flex; flex-direction: column; gap: 8px; color: #9aa096; font-size: 10px; font-weight: 600; }

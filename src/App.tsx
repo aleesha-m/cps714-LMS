@@ -22,11 +22,12 @@ import {
   Settings2,
   UsersRound,
 } from 'lucide-react'
-import { api, ApiError, type ApiBook, type ApiLoan, type ApiMember, type ApiReservation, type BookInput, type Role, type User } from './api'
+import { api, ApiError, type ApiBook, type ApiLoan, type ApiMember, type ApiReservation, type BookInput, type MemberInput, type Role, type User } from './api'
 import { canCheckOut, filterBooks, sortBooks, sortOptions, statusClass, toCatalogBook, type AvailabilityFilter, type SortKey } from './books'
 import BookCover from './components/BookCover'
 import BookDetailModal from './components/BookDetailModal'
 import BookFormModal from './components/BookFormModal'
+import MemberFormModal from './components/MemberFormModal'
 import './App.css'
 
 type Section = 'Overview' | 'Catalog' | 'Members' | 'Loans' | 'History' | 'Reservations' | 'Settings' | 'Help & support'
@@ -101,6 +102,7 @@ function App() {
   const [sort, setSort] = useState<SortKey>('title-asc')
   const [selectedIsbn, setSelectedIsbn] = useState<string | null>(null)
   const [bookForm, setBookForm] = useState<BookFormState>(null)
+  const [memberFormOpen, setMemberFormOpen] = useState(false)
   const [working, setWorking] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const isLibrarian = user?.role === 'librarian'
@@ -337,6 +339,12 @@ function App() {
     setBookForm({ mode: 'add' })
   }
 
+  function openAddMember() {
+    setNotice('')
+    goTo('Members')
+    setMemberFormOpen(true)
+  }
+
   function openEditBook(isbn: string) {
     setNotice('')
     setSelectedIsbn(null)
@@ -369,6 +377,23 @@ function App() {
     setNotice(bookForm.mode === 'edit' ? 'Book updated.' : 'Book added.')
     if (bookForm.mode === 'edit') setSelectedIsbn(bookForm.isbn)
     setBookForm(null)
+  }
+
+  async function saveMember(values: MemberInput) {
+    if (!user) return
+    try {
+      const savedMember = await api.addMember(values)
+      setApiMembers((members) => [...members, savedMember])
+      setMemberFormOpen(false)
+      setNotice(values.role === 'librarian' ? 'Librarian account created.' : 'Member account created.')
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setUser(null)
+        setAuthError('Your session expired. Please sign in again.')
+        return
+      }
+      throw error
+    }
   }
 
   async function deleteBook(isbn: string) {
@@ -537,7 +562,7 @@ function App() {
               <section className="stats-grid" aria-label="Library statistics">
                 <article className="stat-card stat-card-featured"><div className="stat-top"><span>Total books</span><span className="stat-icon"><BookOpen size={17} /></span></div><strong className="stat-number">{books.length.toLocaleString()}</strong><div className="stat-foot"><span>Catalog records</span></div></article>
                 <article className="stat-card"><div className="stat-top"><span>On loan</span><span className="stat-icon stat-icon-blue"><ArrowDownToLine size={17} /></span></div><strong className="stat-number">{loanRows.length.toLocaleString()}</strong><div className="stat-foot"><span>Currently checked out</span></div></article>
-                <article className="stat-card"><div className="stat-top"><span>Registered members</span><span className="stat-icon stat-icon-yellow"><UsersRound size={17} /></span></div><strong className="stat-number">{apiMembers.length.toLocaleString()}</strong><div className="stat-foot"><span>Member records</span></div></article>
+                <article className="stat-card"><div className="stat-top"><span>Registered members</span><span className="stat-icon stat-icon-yellow"><UsersRound size={17} /></span></div><strong className="stat-number">{apiMembers.filter((member) => member.role === 'member').length.toLocaleString()}</strong><div className="stat-foot"><span>General member accounts</span></div></article>
                 <article className="stat-card"><div className="stat-top"><span>Overdue</span><span className="stat-icon stat-icon-rose"><Clock3 size={17} /></span></div><strong className="stat-number">{overdueCount.toLocaleString()}</strong><div className="stat-foot"><span>Past due and not returned</span></div></article>
               </section>
 
@@ -572,7 +597,7 @@ function App() {
                     </div>
                   </div>
                 </div>
-                <div className="panel quick-panel"><div className="panel-heading"><div><h2>Quick actions</h2><p>Common tasks, one click away</p></div></div><button className="quick-action" onClick={openAddBook}><span className="quick-icon quick-icon-green"><Plus size={17} /></span><span><strong>Add new book</strong><small>Add a title to your catalog</small></span><ArrowRight size={15} /></button><button className="quick-action" onClick={() => setActiveSection('Members')}><span className="quick-icon quick-icon-yellow"><UsersRound size={17} /></span><span><strong>Register a member</strong><small>Welcome someone new</small></span><ArrowRight size={15} /></button><button className="quick-action" onClick={() => setActiveSection('Loans')}><span className="quick-icon quick-icon-blue"><ChartNoAxesCombined size={17} /></span><span><strong>View loan report</strong><small>See what’s moving</small></span><ArrowRight size={15} /></button></div>
+                <div className="panel quick-panel"><div className="panel-heading"><div><h2>Quick actions</h2><p>Common tasks, one click away</p></div></div><button className="quick-action" onClick={openAddBook}><span className="quick-icon quick-icon-green"><Plus size={17} /></span><span><strong>Add new book</strong><small>Add a title to your catalog</small></span><ArrowRight size={15} /></button><button className="quick-action" onClick={openAddMember}><span className="quick-icon quick-icon-yellow"><UsersRound size={17} /></span><span><strong>Register a member</strong><small>Welcome someone new</small></span><ArrowRight size={15} /></button><button className="quick-action" onClick={() => setActiveSection('Loans')}><span className="quick-icon quick-icon-blue"><ChartNoAxesCombined size={17} /></span><span><strong>View loan report</strong><small>See what’s moving</small></span><ArrowRight size={15} /></button></div>
               </section>
               <footer className="dashboard-footer"><span>Made for the love of reading.</span><span>COMMONPLACE LIBRARY SYSTEM <i>·</i> 2026</span></footer>
             </>
@@ -585,7 +610,7 @@ function App() {
                   <p>{sectionBlurb(activeSection, isLibrarian)}</p>
                 </div>
                 {isLibrarian && (activeSection === 'Catalog' || activeSection === 'Members' || activeSection === 'Loans') && (
-                  <button className="button button-primary add-button" onClick={() => (activeSection === 'Catalog' ? openAddBook() : setActiveSection('Overview'))}>
+                  <button className="button button-primary add-button" onClick={() => activeSection === 'Catalog' ? openAddBook() : activeSection === 'Members' ? openAddMember() : setActiveSection('Overview')}>
                     <Plus size={16} /> {activeSection === 'Catalog' ? 'Add a book' : activeSection === 'Members' ? 'Add a member' : 'New loan'}
                   </button>
                 )}
@@ -721,9 +746,9 @@ function App() {
                     {apiMembers.filter((m) => `${m.name} ${m.email}`.toLowerCase().includes(query.toLowerCase())).map((m, index) => (
                       <div className="generic-row" key={m.user_id}>
                         <div className={`member-avatar avatar-${avatarColors[index % 3]}`}>{initialsOf(m.name)}</div>
-                        <div><strong>{m.name}</strong><span>{m.email}</span></div>
-                        <span className="member-since">{m.phone_num}</span>
-                        <span className="member-active"><i /> Active</span>
+                        <div><strong>{m.name}</strong><span>{m.email}</span><small className="member-id">ID {m.user_id}</small></div>
+                        <span className="member-since">{m.phone_num || '—'}</span>
+                        <span className={`member-role ${m.role === 'librarian' ? 'member-role-librarian' : ''}`}>{m.role === 'librarian' ? 'Librarian' : 'General member'}</span>
                       </div>
                     ))}
                     {apiMembers.length === 0 && <p className="empty-state">No members yet.</p>}
@@ -819,6 +844,7 @@ function App() {
           onClose={closeBookForm}
         />
       )}
+      {memberFormOpen && <MemberFormModal onSave={saveMember} onClose={() => setMemberFormOpen(false)} />}
     </main>
   )
 }

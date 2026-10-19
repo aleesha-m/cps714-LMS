@@ -55,6 +55,15 @@ export interface ApiMember {
   name: string
   phone_num: string
   email: string
+  role: Role
+}
+
+export interface MemberInput {
+  name: string
+  phone_num: string
+  email: string
+  password: string
+  role: Role
 }
 
 export interface SignupInput {
@@ -97,6 +106,7 @@ export const api = {
   books: () => request<ApiBook[]>('/books'),
   loans: () => request<ApiLoan[]>('/loans'),
   members: () => request<ApiMember[]>('/members'),
+  addMember: (input: MemberInput) => request<ApiMember>('/members', 'POST', input),
   checkOut: (ISBN: string) => request<ApiLoan>('/loans', 'POST', { ISBN }),
   returnLoan: (loanId: string) => request<unknown>(`/loans/${encodeURIComponent(loanId)}/return`, 'PUT'),
   addBook: (input: BookInput) => request<ApiBook>('/books', 'POST', input),
