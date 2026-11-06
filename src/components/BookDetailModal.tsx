@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bookmark, BookmarkX, Pencil, Trash2, X } from 'lucide-react'
+import { Bookmark, BookmarkPlus, BookmarkX, Pencil, Trash2, X } from 'lucide-react'
 import { canCheckOut, statusClass, type CatalogBook } from '../books'
 import BookCover from './BookCover'
 import { useModal } from './useModal'
@@ -8,10 +8,12 @@ interface BookDetailModalProps {
   book: CatalogBook
   isLibrarian: boolean
   hasLoan: boolean
+  isWishlisted: boolean
   working: boolean
   message: string
   onClose: () => void
   onCheckOut: () => void
+  onAddWishlist: () => void
   onReserve: () => void
   onCancelReservation: () => void
   onEdit: () => void
@@ -19,8 +21,8 @@ interface BookDetailModalProps {
 }
 
 function BookDetailModal({
-  book, isLibrarian, hasLoan, working, message,
-  onClose, onCheckOut, onReserve, onCancelReservation, onEdit, onDelete,
+  book, isLibrarian, hasLoan, isWishlisted, working, message,
+  onClose, onCheckOut, onAddWishlist, onReserve, onCancelReservation, onEdit, onDelete,
 }: BookDetailModalProps) {
   const dialogRef = useModal(onClose)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -68,6 +70,10 @@ function BookDetailModal({
                 {!hasLoan && canCheckOut(book) && (
                   <button className="button button-primary" disabled={working} onClick={onCheckOut}>Check out</button>
                 )}
+                {!isLibrarian && !isWishlisted && (
+                  <button className="button button-secondary" disabled={working} onClick={onAddWishlist}><BookmarkPlus size={15} /> Add to wishlist</button>
+                )}
+                {!isLibrarian && isWishlisted && <p className="book-note">This book is already on your wishlist.</p>}
                 {!isLibrarian && !hasLoan && !inQueue && !canCheckOut(book) && (
                   <button className="button button-primary" disabled={working} onClick={onReserve}><Bookmark size={15} /> Reserve this book</button>
                 )}

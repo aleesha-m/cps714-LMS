@@ -122,7 +122,17 @@
 .breadcrumbs strong { color: #3a443b; font-weight: 600; }
 .topbar-actions { gap: 19px; }
 .topbar-date { display: flex; align-items: center; gap: 8px; color: #7e867d; font-size: 10px; }
-.notification-button i { position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; border: 1.5px solid white; border-radius: 50%; background: #bc7058; }
+.notification-count { min-width: 16px; height: 16px; position: absolute; top: 0; right: -3px; display: grid; place-items: center; padding: 0 4px; border: 1.5px solid white; border-radius: 9px; color: #fff; background: #bc7058; font: 600 8px var(--sans); line-height: 1; }
+.notification-menu { position: relative; }
+.notification-panel { width: min(340px, calc(100vw - 32px)); max-height: 360px; position: absolute; z-index: 20; top: calc(100% + 10px); right: -42px; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; background: #fff; box-shadow: 0 12px 30px rgb(34 45 35 / .13); }
+.notification-panel-heading { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); color: #404a40; font-size: 11px; }
+.notification-panel-heading span { color: #738574; font-size: 10px; }
+.notification-empty { margin: 0; padding: 18px 14px; color: #858d82; font-size: 11px; }
+.notification-item { width: 100%; display: grid; gap: 5px; padding: 11px 14px; border: 0; border-bottom: 1px solid #f0f1ed; color: #576157; background: #fff; text-align: left; cursor: pointer; }
+.notification-item:hover { background: #f8f9f6; }
+.notification-item-unread { background: #f4f7f1; }
+.notification-item span { font-size: 11px; font-weight: 600; }
+.notification-item small { color: #858d82; font-size: 10px; line-height: 1.45; }
 .topbar-avatar { width: 29px; height: 29px; }
 .mobile-menu { display: none; }
 .content-wrap { width: min(100%, 1520px); margin: 0 auto; padding: 32px 35px 22px; }
@@ -360,6 +370,14 @@
 .list-toolbar { flex-wrap: wrap; }
 .results-bar { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 18px; border-bottom: 1px solid #f0f1ed; color: #868d83; font-size: 10px; }
 .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 28px 20px; padding: 22px 18px 28px; }
+.catalog-pagination { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 18px 20px; }
+.catalog-page-list { display: flex; align-items: center; gap: 4px; }
+.catalog-page-button { min-width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0 8px; border: 1px solid transparent; border-radius: 3px; color: #69736a; background: transparent; cursor: pointer; font: 500 10px var(--sans); }
+.catalog-page-button:hover:not(:disabled) { border-color: #e2e8df; background: #f5f7f3; }
+.catalog-page-button:disabled { color: #b7bcb4; cursor: not-allowed; }
+.catalog-page-active, .catalog-page-active:hover { border-color: #dce5d8; color: #45684d; background: #edf2e9; font-weight: 700; }
+.catalog-page-direction { padding: 0 10px; }
+.catalog-page-ellipsis { min-width: 18px; color: #969c92; text-align: center; font-size: 11px; }
 .book-card { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
 .book-card-open { width: 100%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; padding: 0; border: 0; border-radius: 3px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .book-card-open .book-cover { margin-bottom: 7px; transition: transform .18s, box-shadow .18s; }
@@ -385,6 +403,70 @@
 .cover-tone-2 { background: #ece8f0; color: #70657f; }
 .cover-tone-3 { background: #e9eff3; color: #617b93; }
 .cover-tone-4 { background: #f3eedf; color: #9a8150; }
+
+/* Member wishlist and chapter progress */
+.wishlist-list { display: grid; gap: 12px; padding: 18px; }
+.reading-goal-card { display: flex; align-items: center; gap: 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+.reading-goal-main { min-width: 0; flex: 1; }
+.reading-goal-title { display: flex; align-items: center; gap: 9px; }
+.reading-goal-icon { width: 29px; height: 29px; display: grid; flex: 0 0 29px; place-items: center; border-radius: 50%; color: #587960; background: #edf2e9; }
+.reading-goal-title h2 { margin: 0 0 3px; color: #404a40; font: 600 12px var(--sans); }
+.reading-goal-title p { margin: 0; color: #858d82; font-size: 10px; }
+.reading-goal-track { height: 5px; overflow: hidden; margin-top: 10px; border-radius: 5px; background: #edf0e9; }
+.reading-goal-track span { height: 100%; display: block; border-radius: inherit; background: #70947a; transition: width .2s ease; }
+.reading-goal-form { display: flex; align-items: center; gap: 5px; }
+.reading-goal-form label { color: #858d82; font-size: 10px; }
+.reading-goal-form input { box-sizing: border-box; width: 48px; height: 27px; padding: 0 5px; border: 1px solid #dfe4dc; border-radius: 3px; color: #586458; background: #f8f9f6; color-scheme: light; font: 11px var(--sans); }
+.reading-goal-form input:focus { border-color: #9eaf9e; outline: 0; background: #fff; box-shadow: 0 0 0 2px rgb(85 117 91 / .1); }
+.reading-goal-form button { width: 27px; height: 27px; display: grid; place-items: center; padding: 0; border: 1px solid #e1e6de; border-radius: 3px; color: #667b68; background: #f8f9f6; cursor: pointer; }
+.reading-goal-form button:hover { background: #eef2eb; }
+.reading-goal-form button:disabled { opacity: .5; cursor: progress; }
+.reading-streak { display: flex; align-items: center; gap: 5px; color: #9a7652; white-space: nowrap; }
+.reading-streak strong { color: #5d5549; font: 600 14px var(--serif); }
+.reading-streak span { color: #858d82; font-size: 10px; }
+.wishlist-results { display: grid; gap: 10px; }
+.wishlist-results-heading { margin: 0; color: #69736a; font: 600 11px var(--sans); }
+.wishlist-suggestion { min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+.wishlist-suggestion-info { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.wishlist-suggestion-info strong { overflow: hidden; color: #404a40; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.wishlist-suggestion-info span { overflow: hidden; color: #8f958b; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.wishlist-card { display: flex; align-items: flex-start; gap: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+.wishlist-card > .book-cover { width: 54px; flex-basis: 54px; }
+.wishlist-card-content { min-width: 0; flex: 1; }
+.wishlist-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.wishlist-card-heading h2 { margin: 0 0 4px; color: #404a40; font: 600 13px/1.35 var(--sans); }
+.wishlist-card-heading p { margin: 0; color: #8f958b; font-size: 10px; }
+.wishlist-remove { flex: 0 0 auto; color: #8f756e; }
+.reading-progress-label { display: flex; justify-content: space-between; margin: 15px 0 7px; color: #737b71; font-size: 10px; }
+.reading-progress-label strong { color: #45684d; font-weight: 700; }
+.reading-progress-row { display: flex; align-items: center; gap: 5px; }
+.reading-progress-track { height: 7px; overflow: hidden; border-radius: 8px; background: #edf0e9; }
+.reading-progress-row .reading-progress-track { flex: 1; }
+.reading-progress-track span { height: 100%; display: block; border-radius: inherit; background: #70947a; transition: width .2s ease; }
+.chapter-count-toggle { width: 23px; height: 23px; display: inline-grid; flex: 0 0 23px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 50%; color: #899487; background: transparent; cursor: pointer; }
+.chapter-count-toggle:hover, .chapter-count-toggle:focus-visible { color: #506b54; border-color: #e2e8df; background: #f5f7f3; outline: 0; }
+.chapter-count-toggle:disabled { opacity: .5; cursor: progress; }
+.chapter-settings-panel { display: grid; gap: 8px; width: fit-content; margin-top: 8px; padding: 8px 10px; border: 1px solid #edf0ea; border-radius: 4px; background: #fafbf9; }
+.chapter-total-edit-form { display: flex; align-items: center; gap: 6px; }
+.chapter-total-edit-form label { color: #858d82; font-size: 10px; }
+.chapter-total-edit-form input { box-sizing: border-box; width: 48px; height: 25px; padding: 0 5px; border: 1px solid #dfe4dc; border-radius: 3px; color: #586458; background: #f8f9f6; color-scheme: light; font: 11px var(--sans); }
+.chapter-total-edit-form input:focus { border-color: #9eaf9e; outline: 0; background: #fff; box-shadow: 0 0 0 2px rgb(85 117 91 / .1); }
+.chapter-total-edit-form .chapter-count-toggle { width: 25px; height: 25px; flex-basis: 25px; border-color: #e1e6de; color: #667b68; background: #f8f9f6; }
+.wishlist-progress-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; margin-top: 10px; }
+.wishlist-card-actions { display: flex; align-items: center; gap: 5px; margin-left: auto; }
+.chapter-button { height: 28px; padding: 0 9px; font-size: 10px; }
+.chapter-count-form { display: grid; gap: 7px; margin-top: 14px; }
+.chapter-count-form label { color: #737b71; font-size: 10px; }
+.chapter-count-form > div { display: flex; gap: 8px; }
+.chapter-count-form input { width: 100px; height: 36px; padding: 0 9px; border: 1px solid #cbd2c7; border-radius: 3px; color: #303b32; background: #fff; color-scheme: light; font: 12px var(--sans); }
+.chapter-count-form input:focus { border-color: var(--moss); outline: 0; box-shadow: 0 0 0 3px rgb(85 117 91 / .14); }
+.chapter-count-form .button { height: 36px; }
+.chapter-progress-form { display: flex; align-items: center; gap: 5px; }
+.chapter-progress-form label { margin-right: 1px; color: #858d82; font-size: 10px; }
+.chapter-progress-form input { box-sizing: border-box; width: 52px; height: 28px; padding: 0 6px; border: 1px solid #dfe4dc; border-radius: 3px; color: #586458; background: #f8f9f6; color-scheme: light; font: 11px var(--sans); }
+.chapter-progress-form input:focus { border-color: #9eaf9e; outline: 0; background: #fff; box-shadow: 0 0 0 2px rgb(85 117 91 / .1); }
+.chapter-progress-form .chapter-save-button { width: 28px; height: 28px; padding: 0; color: #667b68; border-color: #e1e6de; background: #f8f9f6; }
+.chapter-progress-form .chapter-save-button:hover { background: #eef2eb; }
 
 /* Book status */
 .status-ready-for-you i { background: #4a8a55; }
@@ -450,6 +532,10 @@
 @media (max-width: 700px) {
   .results-bar { padding: 0 12px; }
   .book-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 14px; padding: 16px 12px 22px; }
+  .catalog-pagination { gap: 4px; padding: 0 10px 16px; }
+  .catalog-page-list { gap: 1px; }
+  .catalog-page-button { min-width: 27px; height: 28px; padding: 0 5px; font-size: 9px; }
+  .catalog-page-direction { padding: 0 6px; }
   .modal { padding: 24px 18px; }
   .modal-backdrop { align-items: start; padding: 12px; }
   .book-detail { grid-template-columns: 1fr; gap: 18px; }
@@ -459,6 +545,14 @@
   .book-form { grid-template-columns: 1fr; }
   .book-form-preview { display: none; }
   .row-actions { gap: 10px; }
+  .wishlist-list { padding: 12px; }
+  .reading-goal-card { flex-wrap: wrap; gap: 12px; padding: 12px; }
+  .reading-goal-main { flex-basis: 100%; }
+  .reading-goal-form { margin-left: auto; }
+  .notification-panel { right: -36px; }
+  .wishlist-card { gap: 11px; padding: 12px; }
+  .wishlist-suggestion { align-items: flex-start; flex-wrap: wrap; }
+  .wishlist-suggestion .button { margin-left: 46px; }
 }
 
 @media print {

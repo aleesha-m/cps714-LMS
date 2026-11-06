@@ -4,6 +4,8 @@ import Loan from "../models/Loan.js";
 import Book from "../models/Book.js";
 import Member from "../models/Member.js";
 import Reservation from "../models/Reservation.js";
+import Wishlist from "../models/Wishlist.js";
+import Notification from "../models/Notification.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -122,6 +124,15 @@ router.put("/:loan_id/return", async (req, res) => {
         }
 
         await Book.updateOne({ ISBN: loan.ISBN }, { available: true });
+        const wishlistEntries = await Wishlist.find({ ISBN: loan.ISBN }).select("user_id").lean();
+        if (wishlistEntries.length > 0) {
+            await Notification.insertMany(wishlistEntries.map(({ user_id }) => ({
+                user_id,
+                ISBN: loan.ISBN,
+                loan_id: loan.loan_id,
+                message: "A book on your wishlist is available now."
+            })), { ordered: false });
+        }
 
         res.json({
             message: "Book returned successfully",

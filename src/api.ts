@@ -41,6 +41,31 @@ export interface ApiReservation {
   estimated_ready_date: string
 }
 
+export interface ApiWishlist {
+  _id: string
+  user_id: string
+  ISBN: string
+  chaptersRead: number
+  totalChapters: number
+  addedAt: string
+}
+
+export interface ApiNotification {
+  _id: string
+  ISBN: string
+  loan_id: string
+  message: string
+  createdAt: string
+  readAt: string | null
+}
+
+export interface ApiReadingGoal {
+  year: number
+  targetBooks: number
+  booksCompleted: number
+  currentStreak: number
+}
+
 export interface ApiLoan {
   loan_id: string
   user_id: string
@@ -116,4 +141,13 @@ export const api = {
   reservations: () => request<ApiReservation[]>('/reservations'),
   reserve: (ISBN: string) => request<ApiReservation>('/reservations', 'POST', { ISBN }),
   cancelReservation: (id: string) => request<unknown>(`/reservations/${encodeURIComponent(id)}`, 'DELETE'),
+  wishlist: () => request<ApiWishlist[]>('/wishlist'),
+  addWishlist: (ISBN: string) => request<ApiWishlist>('/wishlist', 'POST', { ISBN }),
+  updateWishlistProgress: (ISBN: string, chaptersRead: number, totalChapters: number) =>
+    request<ApiWishlist>(`/wishlist/${encodeURIComponent(ISBN)}`, 'PATCH', { chaptersRead, totalChapters }),
+  removeWishlist: (ISBN: string) => request<{ message: string }>(`/wishlist/${encodeURIComponent(ISBN)}`, 'DELETE'),
+  notifications: () => request<ApiNotification[]>('/notifications'),
+  markNotificationRead: (id: string) => request<ApiNotification>(`/notifications/${encodeURIComponent(id)}/read`, 'PUT'),
+  readingGoal: () => request<ApiReadingGoal>('/reading-goals'),
+  updateReadingGoal: (targetBooks: number) => request<ApiReadingGoal>('/reading-goals', 'PUT', { targetBooks }),
 }

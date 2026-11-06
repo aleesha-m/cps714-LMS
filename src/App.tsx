@@ -9,6 +9,7 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   Bookmark,
+  BookmarkPlus,
   ChevronDown,
   CircleHelp,
   Clock3,
@@ -22,20 +23,38 @@ import {
   Settings2,
   UsersRound,
 } from 'lucide-react'
-import { api, ApiError, type ApiBook, type ApiLoan, type ApiMember, type ApiReservation, type BookInput, type MemberInput, type Role, type User } from './api'
+import { api, ApiError, type ApiBook, type ApiLoan, type ApiMember, type ApiNotification, type ApiReadingGoal, type ApiReservation, type ApiWishlist, type BookInput, type MemberInput, type Role, type User } from './api'
 import { canCheckOut, filterBooks, sortBooks, sortOptions, statusClass, toCatalogBook, type AvailabilityFilter, type SortKey } from './books'
 import BookCover from './components/BookCover'
 import BookDetailModal from './components/BookDetailModal'
 import BookFormModal from './components/BookFormModal'
 import MemberFormModal from './components/MemberFormModal'
+import ReadingGoalCard from './components/ReadingGoalCard'
+import WishlistCard from './components/WishlistCard'
 import './App.css'
 
-type Section = 'Overview' | 'Catalog' | 'Members' | 'Loans' | 'History' | 'Reservations' | 'Settings' | 'Help & support'
-type LandingSection = 'Overview' | 'Catalog' | 'Loans' | 'History'
+type Section = 'Overview' | 'Catalog' | 'Members' | 'Loans' | 'History' | 'Reservations' | 'Wishlist' | 'Settings' | 'Help & support'
+type LandingSection = 'Overview' | 'Catalog' | 'Loans' | 'History' | 'Wishlist'
+type CatalogPageItem = number | 'ellipsis'
+
+const BOOKS_PER_PAGE = 30
+
+function getCatalogPageItems(page: number, pageCount: number): CatalogPageItem[] {
+  if (pageCount <= 7) return Array.from({ length: pageCount }, (_, index) => index + 1)
+
+  const pages = new Set([1, pageCount, page - 1, page, page + 1])
+  const visiblePages = [...pages].filter((value) => value >= 1 && value <= pageCount).sort((a, b) => a - b)
+  const items: CatalogPageItem[] = []
+  visiblePages.forEach((value, index) => {
+    if (index > 0 && value - visiblePages[index - 1] > 1) items.push('ellipsis')
+    items.push(value)
+  })
+  return items
+}
 
 function getLandingSection(role: Role, profileId: string): LandingSection {
   const saved = localStorage.getItem(`lms-default-view:${profileId}`)
-  const allowed: LandingSection[] = role === 'librarian' ? ['Overview', 'Catalog', 'Loans'] : ['Catalog', 'Loans', 'History']
+  const allowed: LandingSection[] = role === 'librarian' ? ['Overview', 'Catalog', 'Loans'] : ['Catalog', 'Loans', 'History', 'Wishlist']
   return allowed.includes(saved as LandingSection) ? saved as LandingSection : role === 'librarian' ? 'Overview' : 'Catalog'
 }
 
@@ -45,6 +64,7 @@ function sectionLabel(section: Section, isLibrarian: boolean) {
     case 'Loans': return isLibrarian ? 'Loans' : 'My loans'
     case 'History': return 'Borrowing history'
     case 'Reservations': return isLibrarian ? 'Reservations' : 'My reservations'
+    case 'Wishlist': return 'Wishlist'
     default: return section
   }
 }
@@ -56,6 +76,7 @@ function sectionBlurb(section: Section, isLibrarian: boolean) {
     case 'Loans': return isLibrarian ? 'Keep track of checkouts, returns, and what’s due.' : 'Books you have checked out, and when they’re due back.'
     case 'History': return 'Every book you have borrowed, and when it went back.'
     case 'Reservations': return isLibrarian ? 'Members waiting for books that are checked out.' : 'Books you are waiting for. We will hold each one when it comes back.'
+    case 'Wishlist': return 'Save books you want to read and keep track of your chapters.'
     case 'Settings': return 'Manage your account details and sign-in destination.'
     case 'Help & support': return 'Find help with borrowing, catalog tasks, and account access.'
     default: return ''
@@ -93,6 +114,9 @@ function App() {
   const [apiLoans, setApiLoans] = useState<ApiLoan[]>([])
   const [apiMembers, setApiMembers] = useState<ApiMember[]>([])
   const [apiReservations, setApiReservations] = useState<ApiReservation[]>([])
+  const [apiWishlist, setApiWishlist] = useState<ApiWishlist[]>([])
+  const [apiNotifications, setApiNotifications] = useState<ApiNotification[]>([])
+  const [readingGoal, setReadingGoal] = useState<ApiReadingGoal | null>(null)
   const [dashboardNow, setDashboardNow] = useState(0)
   const [defaultView, setDefaultView] = useState<LandingSection>('Catalog')
   const [activeSection, setActiveSection] = useState<Section>('Overview')
@@ -100,11 +124,14 @@ function App() {
   const [genre, setGenre] = useState('All genres')
   const [availability, setAvailability] = useState<AvailabilityFilter>('all')
   const [sort, setSort] = useState<SortKey>('title-asc')
+  const [catalogPage, setCatalogPage] = useState(1)
   const [selectedIsbn, setSelectedIsbn] = useState<string | null>(null)
   const [bookForm, setBookForm] = useState<BookFormState>(null)
   const [memberFormOpen, setMemberFormOpen] = useState(false)
   const [working, setWorking] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [notificationsError, setNotificationsError] = useState('')
   const isLibrarian = user?.role === 'librarian'
 
   const books = useMemo(() => apiBooks.map(toCatalogBook), [apiBooks])
@@ -114,6 +141,11 @@ function App() {
     () => sortBooks(filterBooks(books, query, genreFilter, availability), sort),
     [books, query, genreFilter, availability, sort],
   )
+  const catalogPageCount = Math.ceil(filteredBooks.length / BOOKS_PER_PAGE)
+  const currentCatalogPage = catalogPageCount === 0 ? 1 : Math.min(catalogPage, catalogPageCount)
+  const pageStartIndex = (currentCatalogPage - 1) * BOOKS_PER_PAGE
+  const pagedBooks = filteredBooks.slice(pageStartIndex, pageStartIndex + BOOKS_PER_PAGE)
+  const catalogPageItems = getCatalogPageItems(currentCatalogPage, catalogPageCount)
   const filtersActive = query !== '' || genreFilter !== 'All genres' || availability !== 'all'
   const newestBooks = useMemo(() => sortBooks(books, 'newest'), [books])
   const selectedBook = books.find((book) => book.id === selectedIsbn) ?? null
@@ -223,17 +255,23 @@ function App() {
 
   const loadData = useCallback(async (current: User) => {
     try {
-      const [booksData, loansData, membersData, reservationsData] = await Promise.all([
+      const [booksData, loansData, membersData, reservationsData, wishlistData, notificationsData, readingGoalData] = await Promise.all([
         api.books(),
         api.loans(),
         current.role === 'librarian' ? api.members() : Promise.resolve<ApiMember[]>([]),
         api.reservations(),
+        current.role === 'member' ? api.wishlist() : Promise.resolve<ApiWishlist[]>([]),
+        current.role === 'member' ? api.notifications() : Promise.resolve<ApiNotification[]>([]),
+        current.role === 'member' ? api.readingGoal() : Promise.resolve<ApiReadingGoal | null>(null),
       ])
       setDashboardNow(Date.now())
       setApiBooks(booksData)
       setApiLoans(loansData)
       setApiMembers(membersData)
       setApiReservations(reservationsData)
+      setApiWishlist(wishlistData)
+      setApiNotifications(notificationsData)
+      setReadingGoal(readingGoalData)
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         setUser(null)
@@ -259,6 +297,23 @@ function App() {
   useEffect(() => {
     if (user) void loadData(user)
   }, [user, loadData])
+
+  useEffect(() => {
+    if (user?.role !== 'member') return
+    const interval = window.setInterval(() => {
+      api.notifications()
+        .then(setApiNotifications)
+        .catch((error: unknown) => {
+          if (error instanceof ApiError && error.status === 401) {
+            setUser(null)
+            setAuthError('Your session expired. Please sign in again.')
+          } else {
+            setNotice(error instanceof Error ? error.message : 'Could not refresh notifications')
+          }
+        })
+    }, 30_000)
+    return () => window.clearInterval(interval)
+  }, [user])
 
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -295,6 +350,10 @@ function App() {
     setApiLoans([])
     setApiMembers([])
     setApiReservations([])
+    setApiWishlist([])
+    setApiNotifications([])
+    setReadingGoal(null)
+    setNotificationsOpen(false)
     setSelectedIsbn(null)
     setBookForm(null)
     setNotice('')
@@ -325,6 +384,7 @@ function App() {
   function goTo(section: Section) {
     setActiveSection(section)
     setQuery('')
+    setCatalogPage(1)
     setMobileNavOpen(false)
   }
 
@@ -422,6 +482,48 @@ function App() {
     }
   }
   const cancelReservation = (reservationId: string) => runAction(() => api.cancelReservation(reservationId), 'Reservation cancelled.')
+  const wishlistISBNs = new Set(apiWishlist.map((item) => item.ISBN))
+  const wishlistQueryWords = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const wishlistMatches = apiWishlist.filter((item) => {
+    const book = apiBooks.find((candidate) => candidate.ISBN === item.ISBN)
+    const haystack = `${book?.title ?? ''} ${book?.author ?? ''} ${item.ISBN}`.toLowerCase()
+    return wishlistQueryWords.every((word) => haystack.includes(word))
+  })
+  const wishlistSuggestions = query.trim()
+    ? books.filter((book) => {
+        if (wishlistISBNs.has(book.id)) return false
+        const haystack = `${book.title} ${book.author} ${book.genre} ${book.id}`.toLowerCase()
+        return wishlistQueryWords.every((word) => haystack.includes(word))
+      })
+    : []
+  const addToWishlist = async (isbn: string) => {
+    const added = await runAction(() => api.addWishlist(isbn), 'Book added to your wishlist.')
+    if (added) setSelectedIsbn(null)
+  }
+  const updateWishlistProgress = (isbn: string, chaptersRead: number, totalChapters: number) =>
+    runAction(() => api.updateWishlistProgress(isbn, chaptersRead, totalChapters), 'Reading progress updated.')
+  const saveReadingGoal = (targetBooks: number) =>
+    runAction(() => api.updateReadingGoal(targetBooks), 'Reading goal saved.')
+  const unreadNotifications = apiNotifications.filter((item) => !item.readAt).length
+  async function toggleNotifications() {
+    const opening = !notificationsOpen
+    setNotificationsOpen(opening)
+    if (!opening) return
+
+    setNotificationsError('')
+    try {
+      setApiNotifications(await api.notifications())
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setUser(null)
+        setAuthError('Your session expired. Please sign in again.')
+      } else {
+        setNotificationsError(error instanceof Error ? error.message : 'Could not load notifications')
+      }
+    }
+  }
+  const removeFromWishlist = (isbn: string) =>
+    runAction(() => api.removeWishlist(isbn), 'Book removed from your wishlist.')
 
   if (checkingSession) return null
 
@@ -480,6 +582,7 @@ function App() {
                       <input id="code" name="code" type="password" placeholder="Ask your head librarian" autoComplete="off" required />
                     </>
                   )}
+
                 </>
               )}
               <div className="password-label"><label htmlFor="password">Password</label>{authMode === 'signin' && <a href="#forgot">Forgot password?</a>}</div>
@@ -520,12 +623,14 @@ function App() {
             ['Members', UsersRound],
             ['Loans', ArrowDownToLine],
             ['Reservations', Bookmark],
+            ['Wishlist', BookmarkPlus],
             ['History', HistoryIcon],
-          ] as const).filter(([section]) => isLibrarian ? section !== 'History' : section !== 'Overview' && section !== 'Members').map(([section, Icon]) => (
+          ] as const).filter(([section]) => isLibrarian ? section !== 'History' && section !== 'Wishlist' : section !== 'Overview' && section !== 'Members').map(([section, Icon]) => (
             <button key={section} className={`nav-link ${activeSection === section ? 'nav-link-active' : ''}`} onClick={() => goTo(section)}>
               <Icon size={17} strokeWidth={1.8} /><span>{sectionLabel(section, isLibrarian)}</span>
               {section === 'Loans' && loanRows.length > 0 && <span className="nav-count">{loanRows.length}</span>}
               {section === 'Reservations' && reservationRows.length > 0 && <span className="nav-count">{reservationRows.length}</span>}
+              {section === 'Wishlist' && apiWishlist.length > 0 && <span className="nav-count">{apiWishlist.length}</span>}
             </button>
           ))}
         </nav>
@@ -546,7 +651,39 @@ function App() {
           <div className="breadcrumbs"><span>Northwood Library</span><span className="breadcrumb-slash">/</span><strong>{sectionLabel(activeSection, isLibrarian)}</strong></div>
           <div className="topbar-actions">
             <div className="topbar-date"><CalendarDays size={15} /><span>Thursday, October 2, 2026</span></div>
-            <button className="icon-button notification-button" aria-label="Notifications"><Bell size={18} /><i /></button>
+            {!isLibrarian && (
+              <div className="notification-menu">
+                <button className="icon-button notification-button" aria-label={`Notifications${unreadNotifications ? `, ${unreadNotifications} unread` : ''}`} aria-expanded={notificationsOpen} onClick={() => void toggleNotifications()}>
+                  <Bell size={18} />
+                  {unreadNotifications > 0 && <span className="notification-count">{unreadNotifications > 9 ? '9+' : unreadNotifications}</span>}
+                </button>
+                {notificationsOpen && (
+                  <div className="notification-panel" role="region" aria-label="Notifications">
+                    <div className="notification-panel-heading">
+                      <strong>Notifications</strong>
+                      {unreadNotifications > 0 && <span>{unreadNotifications} new</span>}
+                    </div>
+                    {notificationsError ? (
+                      <p className="notification-empty" role="alert">{notificationsError}</p>
+                    ) : apiNotifications.length === 0 ? (
+                      <p className="notification-empty">You’re all caught up.</p>
+                    ) : apiNotifications.map((item) => (
+                      <button
+                        key={item._id}
+                        className={`notification-item ${item.readAt ? '' : 'notification-item-unread'}`}
+                        onClick={() => {
+                          setNotificationsOpen(false)
+                          if (!item.readAt) void runAction(() => api.markNotificationRead(item._id), '')
+                        }}
+                      >
+                        <span>{apiBooks.find((book) => book.ISBN === item.ISBN)?.title ?? item.ISBN}</span>
+                        <small>{item.message} · {formatDate(item.createdAt)}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="topbar-avatar">{initialsOf(user.name)}</div>
           </div>
         </header>
@@ -614,6 +751,9 @@ function App() {
                     <Plus size={16} /> {activeSection === 'Catalog' ? 'Add a book' : activeSection === 'Members' ? 'Add a member' : 'New loan'}
                   </button>
                 )}
+                {!isLibrarian && activeSection === 'Wishlist' && (
+                  <button className="button button-primary add-button" onClick={() => goTo('Catalog')}><BookCopy size={16} /> Browse catalog</button>
+                )}
               </div>
               <div className="panel section-panel">
                 {activeSection === 'Settings' ? (
@@ -637,7 +777,7 @@ function App() {
                           {isLibrarian ? (
                             <><option value="Overview">Overview</option><option value="Catalog">Catalog</option><option value="Loans">Loans</option></>
                           ) : (
-                            <><option value="Catalog">Catalog</option><option value="Loans">My loans</option><option value="History">Borrowing history</option></>
+                            <><option value="Catalog">Catalog</option><option value="Loans">My loans</option><option value="History">Borrowing history</option><option value="Wishlist">Wishlist</option></>
                           )}
                         </select>
                       </label>
@@ -658,6 +798,7 @@ function App() {
                           <details><summary>How do I check out a book?</summary><p>In Catalog, choose Check out on an available book, or open its details and choose Check out. You will be taken to My loans after checkout.</p></details>
                           <details><summary>What if a book is already checked out?</summary><p>Open the book and choose Reserve. You can see your place in line under My reservations.</p></details>
                           <details><summary>Where can I see my due dates?</summary><p>Open My loans to see active checkouts and due dates. Returned books appear in Borrowing history.</p></details>
+                          <details><summary>How do I track books I want to read?</summary><p>Add books to your wishlist from the Catalog. Set the chapter count, then update your progress as you read.</p></details>
                         </>
                       )}
                     </section>
@@ -675,23 +816,23 @@ function App() {
                     <input
                       type="search"
                       aria-label={`Search ${sectionLabel(activeSection, isLibrarian).toLowerCase()}`}
-                      placeholder={activeSection === 'Catalog' ? 'Search by title, author, genre, or ISBN...' : `Search ${sectionLabel(activeSection, isLibrarian).toLowerCase()}...`}
+                      placeholder={activeSection === 'Catalog' || activeSection === 'Wishlist' ? 'Search by title, author, genre, or ISBN...' : `Search ${sectionLabel(activeSection, isLibrarian).toLowerCase()}...`}
                       value={query}
-                      onChange={(event) => setQuery(event.target.value)}
+                      onChange={(event) => { setQuery(event.target.value); setCatalogPage(1) }}
                     />
                   </label>
                   {activeSection === 'Catalog' && (
                     <>
-                      <select className="genre-select" aria-label="Filter by genre" value={genreFilter} onChange={(event) => setGenre(event.target.value)}>
+                      <select className="genre-select" aria-label="Filter by genre" value={genreFilter} onChange={(event) => { setGenre(event.target.value); setCatalogPage(1) }}>
                         <option>All genres</option>
                         {genres.map((name) => <option key={name}>{name}</option>)}
                       </select>
-                      <select className="genre-select" aria-label="Filter by availability" value={availability} onChange={(event) => setAvailability(event.target.value as AvailabilityFilter)}>
+                      <select className="genre-select" aria-label="Filter by availability" value={availability} onChange={(event) => { setAvailability(event.target.value as AvailabilityFilter); setCatalogPage(1) }}>
                         <option value="all">All books</option>
                         <option value="available">On the shelf</option>
                         <option value="checked-out">Checked out</option>
                       </select>
-                      <select className="genre-select" aria-label="Sort books" value={sort} onChange={(event) => setSort(event.target.value as SortKey)}>
+                      <select className="genre-select" aria-label="Sort books" value={sort} onChange={(event) => { setSort(event.target.value as SortKey); setCatalogPage(1) }}>
                         {sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                     </>
@@ -702,9 +843,14 @@ function App() {
                 {activeSection === 'Catalog' && (
                   <>
                     <div className="results-bar" aria-live="polite">
-                      <span>{filteredBooks.length === books.length ? `${books.length} ${books.length === 1 ? 'book' : 'books'}` : `${filteredBooks.length} of ${books.length} books`}</span>
+                      <span>
+                        {filteredBooks.length === 0
+                          ? '0 books'
+                          : `${pageStartIndex + 1}–${Math.min(pageStartIndex + BOOKS_PER_PAGE, filteredBooks.length)} of ${filteredBooks.length} books`}
+                        {filteredBooks.length !== books.length && ` · ${books.length} total`}
+                      </span>
                       {filtersActive && (
-                        <button className="text-button" onClick={() => { setQuery(''); setGenre('All genres'); setAvailability('all') }}>Clear search and filters</button>
+                        <button className="text-button" onClick={() => { setQuery(''); setGenre('All genres'); setAvailability('all'); setCatalogPage(1) }}>Clear search and filters</button>
                       )}
                     </div>
                     {filteredBooks.length === 0 ? (
@@ -715,7 +861,7 @@ function App() {
                       </p>
                     ) : (
                       <div className="book-grid">
-                        {filteredBooks.map((book) => {
+                        {pagedBooks.map((book) => {
                           const hasLoan = myActiveLoanIsbns.has(book.id)
                           return (
                             <article key={book.id} className="book-card">
@@ -728,6 +874,15 @@ function App() {
                               {!isLibrarian && !hasLoan && canCheckOut(book) && (
                                 <button className="text-button book-card-checkout" disabled={working} onClick={() => void checkOutBook(book.id)}>Check out <ArrowRight size={14} /></button>
                               )}
+                              {!isLibrarian && (
+                                <button
+                                  className="text-button book-card-checkout"
+                                  disabled={working || wishlistISBNs.has(book.id)}
+                                  onClick={() => void addToWishlist(book.id)}
+                                >
+                                  <BookmarkPlus size={14} /> {wishlistISBNs.has(book.id) ? 'On wishlist' : 'Add to wishlist'}
+                                </button>
+                              )}
                               {!isLibrarian && !hasLoan && !canCheckOut(book) && (
                                 book.myPosition === null
                                   ? <button className="text-button book-card-checkout" disabled={working} onClick={() => void reserveBook(book.id)}><Bookmark size={14} /> Reserve</button>
@@ -737,6 +892,39 @@ function App() {
                           )
                         })}
                       </div>
+                    )}
+                    {catalogPageCount > 1 && (
+                      <nav className="catalog-pagination" aria-label="Catalog pages">
+                        <button
+                          className="catalog-page-button catalog-page-direction"
+                          disabled={currentCatalogPage === 1}
+                          onClick={() => setCatalogPage(currentCatalogPage - 1)}
+                        >
+                          Previous
+                        </button>
+                        <div className="catalog-page-list">
+                          {catalogPageItems.map((page, index) => page === 'ellipsis' ? (
+                            <span className="catalog-page-ellipsis" key={`ellipsis-${index}`} aria-hidden="true">…</span>
+                          ) : (
+                            <button
+                              className={`catalog-page-button ${currentCatalogPage === page ? 'catalog-page-active' : ''}`}
+                              key={page}
+                              aria-label={`Page ${page}`}
+                              aria-current={currentCatalogPage === page ? 'page' : undefined}
+                              onClick={() => setCatalogPage(page)}
+                            >
+                              {page}
+                            </button>
+                          ))}
+                        </div>
+                        <button
+                          className="catalog-page-button catalog-page-direction"
+                          disabled={currentCatalogPage === catalogPageCount}
+                          onClick={() => setCatalogPage(currentCatalogPage + 1)}
+                        >
+                          Next
+                        </button>
+                      </nav>
                     )}
                   </>
                 )}
@@ -807,6 +995,35 @@ function App() {
                     ))}
                   </div>
                 )}
+
+                {activeSection === 'Wishlist' && (
+                  <div className="wishlist-list">
+                    {readingGoal && <ReadingGoalCard key={readingGoal.year} goal={readingGoal} working={working} onSave={saveReadingGoal} />}
+                    {wishlistMatches.length > 0 && (
+                      <section className="wishlist-results" aria-label="Saved wishlist books">
+                        {query.trim() && <h2 className="wishlist-results-heading">Your wishlist</h2>}
+                        {wishlistMatches.map((item) => (
+                          <WishlistCard key={item.ISBN} item={item} book={books.find((book) => book.id === item.ISBN)} working={working} onProgress={(chaptersRead, totalChapters) => updateWishlistProgress(item.ISBN, chaptersRead, totalChapters)} onRemove={() => void removeFromWishlist(item.ISBN)} />
+                        ))}
+                      </section>
+                    )}
+                    {wishlistSuggestions.length > 0 && (
+                      <section className="wishlist-results" aria-label="Catalog search results">
+                        <h2 className="wishlist-results-heading">Books in the catalog</h2>
+                        {wishlistSuggestions.map((book) => (
+                          <article className="wishlist-suggestion" key={book.id}>
+                            <BookCover title={book.title} cover={book.cover} size="sm" />
+                            <div className="wishlist-suggestion-info"><strong>{book.title}</strong><span>{book.author}</span></div>
+                            <button className="button button-secondary" disabled={working} onClick={() => void addToWishlist(book.id)}><BookmarkPlus size={15} /> Add to wishlist</button>
+                          </article>
+                        ))}
+                      </section>
+                    )}
+                    {wishlistMatches.length === 0 && wishlistSuggestions.length === 0 && (
+                      <p className="empty-state">{query.trim() ? 'No matching books found in your wishlist or the catalog.' : 'Your wishlist is empty. Search the catalog above to find books you want to read.'}</p>
+                    )}
+                  </div>
+                )}
                   </>
                 )}
               </div>
@@ -822,10 +1039,12 @@ function App() {
           book={selectedBook}
           isLibrarian={isLibrarian}
           hasLoan={myActiveLoanIsbns.has(selectedBook.id)}
+          isWishlisted={wishlistISBNs.has(selectedBook.id)}
           working={working}
           message={notice}
           onClose={() => setSelectedIsbn(null)}
           onCheckOut={() => void checkOutBook(selectedBook.id)}
+          onAddWishlist={() => void addToWishlist(selectedBook.id)}
           onReserve={() => void reserveBook(selectedBook.id)}
           onCancelReservation={() => {
             const mine = apiReservations.find((r) => r.ISBN === selectedBook.id && r.user_id === user.profile_id)

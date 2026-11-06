@@ -8,6 +8,9 @@ import librariansRouter from "./routes/librarians.js";
 import membersRouter from "./routes/members.js";
 import loansRouter from "./routes/loans.js";
 import reservationsRouter from "./routes/reservations.js";
+import wishlistRouter from "./routes/wishlist.js";
+import notificationRouter from "./routes/notifications.js";
+import readingGoalRouter from "./routes/readingGoals.js";
 
 dotenv.config();
 
@@ -25,6 +28,9 @@ app.use("/api/librarians", librariansRouter);
 app.use("/api/members", membersRouter);
 app.use("/api/loans", loansRouter);
 app.use("/api/reservations", reservationsRouter);
+app.use("/api/wishlist", wishlistRouter);
+app.use("/api/notifications", notificationRouter);
+app.use("/api/reading-goals", readingGoalRouter);
 
 app.get("/", (req, res) => {
     res.send("Library Management System API is running");
